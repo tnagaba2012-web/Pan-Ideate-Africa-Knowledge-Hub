@@ -34,40 +34,86 @@ page = st.sidebar.radio(
 # ======================================
 
 if page == "🏠 Home":
-
     st.title("🌍 Pan Ideate Africa Knowledge Hub")
 
-    st.subheader(
-        "Building Africa Through Science, Innovation & Entrepreneurship"
-    )
+    st.markdown("""
+    # Building Africa Through Science, Innovation & Practical Education
 
-    st.success(
-        "Welcome to Uganda's future Science, Minerals & Innovation Platform."
-    )
+    Welcome to the Pan Ideate Africa Knowledge Hub.
 
-  
-    st.write("""
-Welcome to the Pan Ideate Africa Knowledge Hub.
+    Our mission is to empower African youth through science,
+    technology, innovation, entrepreneurship and practical education.
 
-Our mission is to empower African youth through science,
-entrepreneurship and practical education.
+    Together we can transform ideas into industries.
 
-This platform will become Africa's largest youth innovation platform.
-""")
+    """)
+
+    st.info("🚀 Welcome to Version 2 of the Pan Ideate Africa Knowledge Hub!")
 
     st.divider()
 
     col1, col2, col3 = st.columns(3)
 
     with col1:
-        st.metric("Projects", "20+")
+       st.metric("📚 Learning Articles", "250+")
 
-    with col2:
-        st.metric("Youth Skills", "100+")
+with col2:
+       st.metric("🧪 Science Projects", "40+")
 
-    with col3:
-        st.metric("Innovation Goal", "Africa")
-    st.divider()
+with col3:
+       st.metric("🌱 Innovation Goal", "100+")
+
+st.divider()
+
+st.subheader("⭐ Featured Innovation Projects")
+
+project1, project2 = st.columns(2)
+
+with project1:
+
+    st.success("🌱 Biochar Project")
+
+    st.write(
+        "Transform agricultural waste into valuable biochar for improving soil fertility and supporting climate-smart agriculture."
+    )
+
+    st.success("🟤 Bentonite Project")
+
+    st.write(
+        "Develop water-retention products, livestock feed additives and industrial applications using locally available bentonite."
+    )
+
+with project2:
+
+    st.success("🧪 Iron Oxide Pigments")
+
+    st.write(
+        "Produce natural pigments for paints, construction materials and educational demonstrations."
+    )
+
+    st.success("⚪ Kaolin & Silicon")
+
+    st.write(
+        "Research advanced materials for ceramics, electronics and future semiconductor industries."
+    )
+
+st.divider()
+
+st.success("🌍 Together we are building Africa through Science, Innovation and Practical Education.")
+   
+
+st.divider()     
+col1, col2, col3 = st.columns(3)
+with col1:
+    st.metric("Projects", "20+")
+with col2:
+    st.metric("Youth Skills", "100+")
+with col3:
+    st.metric("Innovation Goal", "Africa")
+    st.metric("Youth Skills", "100+")
+with col3:
+    st.metric("Innovation Goal", "Africa")
+st.divider()
 st.header("🚀 Featured Projects")
 
 project1, project2 = st.columns(2)
