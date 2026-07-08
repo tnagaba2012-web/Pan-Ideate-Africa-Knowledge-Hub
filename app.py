@@ -55,3 +55,4 @@ elif page == "🚀 Innovation":
 elif page == "📞 Contact":
     from pages.contact import show_page
     show_page()
+    
