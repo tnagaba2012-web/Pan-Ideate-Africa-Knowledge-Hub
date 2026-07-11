@@ -3,26 +3,40 @@ import streamlit as st
 
 def show_hero():
 
-    st.title("🌍 Pan Ideate Africa")
+    st.image("assets/pan_ideate_logo.png", width=260)
+
+    st.title("🌍 Pan Ideate Africa Ltd")
 
     st.subheader(
-        "Building Africa Through Science, Innovation & Practical Education"
-    )
+    "Africa's Knowledge Hub for Science, Innovation and Enterprise"
+)
 
     st.success(
-        "Welcome to the official Pan Ideate Africa Knowledge Hub."
-    )
+    "Empowering African youth through practical science, technology, agriculture and entrepreneurship."
+)
 
-    st.write("""
-Pan Ideate Africa is developing practical scientific knowledge,
-innovation, entrepreneurship and technology solutions for Africa.
+    st.markdown("""
+### Welcome
 
-Our mission is to transform ideas into industries that improve
-lives through education, research and innovation.
+Pan Ideate Africa Ltd is building a modern African knowledge hub where students,
+researchers, entrepreneurs and innovators can learn, discover and develop
+real solutions for Africa.
+
+Our work combines:
+
+- 🧪 Minerals & Chemistry
+- 🌱 Agriculture Innovation
+- 🤖 Artificial Intelligence
+- 📚 Learning Centre
+- 💼 Business Development
+- 🚀 Innovation & Research
+
+Every project is designed to create knowledge, businesses and employment
+opportunities across Uganda and Africa.
 """)
 
     st.info(
-        "💡 Learn • Innovate • Build • Transform Africa"
-    )
+    "💡 Learn • Innovate • Practice • Produce • Earn"
+)
 
     st.divider()
