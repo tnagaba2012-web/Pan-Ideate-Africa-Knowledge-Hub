@@ -1,5 +1,5 @@
 import streamlit as st
-
+st.error("THIS IS THE 561-LINE AGRICULTURE PAGE")
 def show_page():
 
     st.title("🌱 Agriculture Innovation Centre")
