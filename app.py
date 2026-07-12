@@ -1,6 +1,6 @@
 
 import streamlit as st
-
+st.error("THIS IS MY APP.PY")
 st.set_page_config(
     page_title="Pan Ideate Africa Knowledge Hub",
     page_icon="🌍",
