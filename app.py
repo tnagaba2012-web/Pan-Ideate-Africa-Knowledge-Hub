@@ -1,7 +1,7 @@
 import streamlit as st
 
 # Import chapters
-from chapters.chapter1_sections import show_chapter1
+from chapters.chapter1_sections.section1_1 import show_section_1_1
 
 # --------------------------------------------------
 # Page Configuration
