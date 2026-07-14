@@ -1,58 +1,121 @@
-
 import streamlit as st
-st.error("THIS IS MY APP.PY")
+
+# Import chapters
+from chapters.chapter1 import show_chapter1
+
+# --------------------------------------------------
+# Page Configuration
+# --------------------------------------------------
 st.set_page_config(
-    page_title="Pan Ideate Africa Knowledge Hub",
+    page_title="Pan-ID8 African Knowledge Hub",
     page_icon="🌍",
     layout="wide"
 )
 
-st.sidebar.title("🌍 Pan Ideate Africa")
+# --------------------------------------------------
+# Sidebar
+# --------------------------------------------------
+st.sidebar.title("🌍 Pan-ID8")
+st.sidebar.markdown("### African Knowledge Hub")
 
 page = st.sidebar.radio(
     "Navigation",
     [
         "🏠 Home",
-        "🧪 Minerals & Chemistry",
+        "📚 Chapter 1",
+        "🧪 Chemistry Lab",
         "🌱 Agriculture",
-        "💼 Business Development",
-        "🤖 Artificial Intelligence",
-        "📚 Learning Centre",
-        "🚀 Innovation",
-        "📞 Contact"
-    ],
-    key="main_navigation"
+        "🤖 AI Assistant",
+        "📊 Progress"
+    ]
 )
 
+# --------------------------------------------------
+# Home Page
+# --------------------------------------------------
 if page == "🏠 Home":
-    from pages.home import show_page
-    show_page()
 
-elif page == "🧪 Minerals & Chemistry":
-    from pages.minerals import show_page
-    show_page()
+    st.title("🌍 Pan-ID8 African Knowledge Hub")
 
+    st.subheader("Uganda Minerals Master Project")
+
+    st.success("Welcome to Version 8")
+
+    st.markdown("---")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+
+        st.markdown("## 📚 Learning")
+
+        st.write("• Uganda Minerals Master Project")
+        st.write("• Chemistry")
+        st.write("• Mineral Identification")
+        st.write("• Exploration")
+        st.write("• Value Addition")
+
+    with col2:
+
+        st.markdown("## 🚀 Future Modules")
+
+        st.write("• Agriculture")
+        st.write("• Biochar")
+        st.write("• Bentonite")
+        st.write("• Kaolin")
+        st.write("• Silicon")
+        st.write("• AI Learning")
+
+    st.markdown("---")
+
+    st.info(
+        "Our mission is to build Africa's most practical knowledge platform "
+        "for minerals, chemistry, agriculture, innovation, and entrepreneurship."
+    )
+
+# --------------------------------------------------
+# Chapter 1
+# --------------------------------------------------
+elif page == "📚 Chapter 1":
+
+    show_chapter1()
+
+# --------------------------------------------------
+# Chemistry
+# --------------------------------------------------
+elif page == "🧪 Chemistry Lab":
+
+    st.title("🧪 Chemistry Laboratory")
+
+    st.write("Coming soon...")
+
+# --------------------------------------------------
+# Agriculture
+# --------------------------------------------------
 elif page == "🌱 Agriculture":
-    from pages.agriculture import show_page
-    show_page()
 
-elif page == "💼 Business Development":
-    from pages.business import show_page
-    show_page()
+    st.title("🌱 Agriculture")
 
-elif page == "🤖 Artificial Intelligence":
-    from pages.ai import show_page
-    show_page()
+    st.write("Coming soon...")
 
-elif page == "📚 Learning Centre":
-    from pages.learning import show_page
-    show_page()
+# --------------------------------------------------
+# AI Assistant
+# --------------------------------------------------
+elif page == "🤖 AI Assistant":
 
-elif page == "🚀 Innovation":
-    from pages.innovation import show_page
-    show_page()
+    st.title("🤖 AI Assistant")
 
-elif page == "📞 Contact":
-    from pages.contact import show_page
-    show_page()
-    
+    st.write("Coming soon...")
+
+# --------------------------------------------------
+# Progress
+# --------------------------------------------------
+elif page == "📊 Progress":
+
+    st.title("📊 Progress")
+
+    st.progress(10)
+
+    st.success("Chapter 1 has been completed and approved.")
+
+    st.write("More progress tracking will be added in future versions.")
