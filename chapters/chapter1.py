@@ -1,7 +1,7 @@
 import streamlit as st
 
 # Import Chapter 1 Sections
-from chapters.chapter1.section1_1 import show_section_1_1
+from chapters.chapter1_sections.section1_1 import show_section_1_1
 
 
 def show_chapter1():
