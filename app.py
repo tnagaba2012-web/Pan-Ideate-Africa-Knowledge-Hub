@@ -1,5 +1,12 @@
 import streamlit as st
-
+from pages import home
+from pages import minerals
+from pages import agriculture
+from pages import business
+from pages import ai
+from pages import learning
+from pages import innovation
+from pages import contact
 # ============================================
 # PAGE CONFIGURATION
 # ============================================
