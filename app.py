@@ -1,121 +1,288 @@
 import streamlit as st
 
-# Import chapters
-from chapters.chapter1 import show_chapter1
+# ============================================
+# PAGE CONFIGURATION
+# ============================================
 
-# --------------------------------------------------
-# Page Configuration
-# --------------------------------------------------
 st.set_page_config(
-    page_title="Pan-ID8 African Knowledge Hub",
+    page_title="Pan Ideate Africa Knowledge Hub",
     page_icon="🌍",
-    layout="wide"
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
 
-# --------------------------------------------------
-# Sidebar
-# --------------------------------------------------
-st.sidebar.title("🌍 Pan-ID8")
-st.sidebar.markdown("### African Knowledge Hub")
+# ============================================
+# CUSTOM STYLING
+# ============================================
+
+st.markdown("""
+<style>
+
+.main {
+    background-color: #f7f9fc;
+}
+
+h1,h2,h3{
+    color:#0B6E4F;
+}
+
+div[data-testid="stSidebar"]{
+    background-color:#0B6E4F;
+}
+
+div[data-testid="stSidebar"] *{
+    color:white;
+}
+
+.project-card{
+    background:white;
+    padding:20px;
+    border-radius:12px;
+    border-left:8px solid #0B6E4F;
+    box-shadow:0 4px 12px rgba(0,0,0,0.08);
+    margin-bottom:20px;
+}
+
+.footer{
+    text-align:center;
+    color:gray;
+    padding-top:40px;
+}
+
+</style>
+""", unsafe_allow_html=True)
+
+# ============================================
+# SIDEBAR
+# ============================================
+
+st.sidebar.title("🌍 Pan Ideate Africa")
+
+st.sidebar.markdown("### Knowledge Hub")
 
 page = st.sidebar.radio(
+
     "Navigation",
+
     [
+
         "🏠 Home",
-        "📚 Chapter 1",
-        "🧪 Chemistry Lab",
+
+        "🧪 Minerals & Chemistry",
+
         "🌱 Agriculture",
-        "🤖 AI Assistant",
-        "📊 Progress"
+
+        "💼 Business Development",
+
+        "🤖 Artificial Intelligence",
+
+        "📚 Learning Centre",
+
+        "🚀 Innovation",
+
+        "📞 Contact"
+
     ]
+
 )
 
-# --------------------------------------------------
-# Home Page
-# --------------------------------------------------
-if page == "🏠 Home":
+st.sidebar.divider()
 
-    st.title("🌍 Pan-ID8 African Knowledge Hub")
+st.sidebar.success("Version 7.1")
 
-    st.subheader("Uganda Minerals Master Project")
+# ============================================
+# HOME
+# ============================================
 
-    st.success("Welcome to Version 8")
+if page=="🏠 Home":
 
-    st.markdown("---")
+    st.title("🌍 Pan Ideate Africa Knowledge Hub")
 
-    col1, col2 = st.columns(2)
-
-    with col1:
-
-        st.markdown("## 📚 Learning")
-
-        st.write("• Uganda Minerals Master Project")
-        st.write("• Chemistry")
-        st.write("• Mineral Identification")
-        st.write("• Exploration")
-        st.write("• Value Addition")
-
-    with col2:
-
-        st.markdown("## 🚀 Future Modules")
-
-        st.write("• Agriculture")
-        st.write("• Biochar")
-        st.write("• Bentonite")
-        st.write("• Kaolin")
-        st.write("• Silicon")
-        st.write("• AI Learning")
-
-    st.markdown("---")
-
-    st.info(
-        "Our mission is to build Africa's most practical knowledge platform "
-        "for minerals, chemistry, agriculture, innovation, and entrepreneurship."
+    st.subheader(
+        "Building Africa Through Science, Innovation & Practical Education"
     )
 
-# --------------------------------------------------
-# Chapter 1
-# --------------------------------------------------
-elif page == "📚 Chapter 1":
+    st.info(
+        "Welcome to Version 7 Build 7.1"
+    )
 
-    show_chapter1()
+    st.write("""
 
-# --------------------------------------------------
-# Chemistry
-# --------------------------------------------------
-elif page == "🧪 Chemistry Lab":
+Pan Ideate Africa is building an African knowledge platform
+that empowers young people through science, chemistry,
+innovation, entrepreneurship and practical education.
 
-    st.title("🧪 Chemistry Laboratory")
+This platform will continue growing into one of Africa's
+largest knowledge and innovation hubs.
 
-    st.write("Coming soon...")
+""")
 
-# --------------------------------------------------
-# Agriculture
-# --------------------------------------------------
-elif page == "🌱 Agriculture":
+    st.divider()
+
+    col1,col2,col3,col4 = st.columns(4)
+
+    with col1:
+        st.metric("Projects","20+")
+
+    with col2:
+        st.metric("Research Areas","10+")
+
+    with col3:
+        st.metric("Youth Goal","1 Million")
+
+    with col4:
+        st.metric("Countries","Africa")
+
+    st.divider()
+
+    st.header("⭐ Featured Projects")
+
+    left,right = st.columns(2)
+
+    with left:
+
+        st.markdown("""
+<div class="project-card">
+
+## 🌱 Biochar
+
+Climate-smart agriculture
+
+Carbon storage
+
+Soil improvement
+
+</div>
+""",unsafe_allow_html=True)
+
+        st.markdown("""
+<div class="project-card">
+
+## 🟤 Bentonite
+
+Water retention
+
+Animal feeds
+
+Industrial applications
+
+</div>
+""",unsafe_allow_html=True)
+
+    with right:
+
+        st.markdown("""
+<div class="project-card">
+
+## 🧪 Iron Oxide Pigments
+
+Natural pigments
+
+Construction
+
+Education
+
+</div>
+""",unsafe_allow_html=True)
+
+        st.markdown("""
+<div class="project-card">
+
+## ⚪ Kaolin & Silicon
+
+Advanced materials
+
+Ceramics
+
+Future electronics
+
+</div>
+""",unsafe_allow_html=True)
+
+    st.divider()
+
+    st.success("🚀 Version 7 is now under active development.")
+
+# ============================================
+# MINERALS
+# ============================================
+
+elif page=="🧪 Minerals & Chemistry":
+
+    st.title("🧪 Minerals & Chemistry")
+
+    st.info("Detailed content arrives in Build 7.2")
+
+# ============================================
+
+elif page=="🌱 Agriculture":
 
     st.title("🌱 Agriculture")
 
-    st.write("Coming soon...")
+    st.info("Detailed content arrives in Build 7.2")
 
-# --------------------------------------------------
-# AI Assistant
-# --------------------------------------------------
-elif page == "🤖 AI Assistant":
+# ============================================
 
-    st.title("🤖 AI Assistant")
+elif page=="💼 Business Development":
 
-    st.write("Coming soon...")
+    st.title("💼 Business Development")
 
-# --------------------------------------------------
-# Progress
-# --------------------------------------------------
-elif page == "📊 Progress":
+    st.info("Detailed content arrives in Build 7.2")
 
-    st.title("📊 Progress")
+# ============================================
 
-    st.progress(10)
+elif page=="🤖 Artificial Intelligence":
 
-    st.success("Chapter 1 has been completed and approved.")
+    st.title("🤖 Artificial Intelligence")
 
-    st.write("More progress tracking will be added in future versions.")
+    st.info("AI Assistant arrives in Build 7.3")
+
+# ============================================
+
+elif page=="📚 Learning Centre":
+
+    st.title("📚 Learning Centre")
+
+    st.info("Learning Centre arrives in Build 7.3")
+
+# ============================================
+
+elif page=="🚀 Innovation":
+
+    st.title("🚀 Innovation")
+
+    st.info("Innovation Hub arrives in Build 7.3")
+
+# ============================================
+
+elif page=="📞 Contact":
+
+    st.title("📞 Contact")
+
+    st.write("""
+
+Pan Ideate Africa Ltd.
+
+Building Africa Through Science,
+Innovation & Practical Education.
+
+""")
+
+# ============================================
+# FOOTER
+# ============================================
+
+st.divider()
+
+st.markdown(
+"""
+<div class="footer">
+
+© 2026 Pan Ideate Africa Ltd.
+
+Version 7 • Build 7.1
+
+</div>
+""",
+unsafe_allow_html=True
+)
