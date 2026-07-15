@@ -116,19 +116,8 @@ elif page=="🧪 Minerals & Chemistry":
 
 # ============================================
 
-elif page=="🌱 Agriculture":
-
-    st.title("🌱 Agriculture")
-
-    st.info("Detailed content arrives in Build 7.2")
-
-# ============================================
-
-elif page=="💼 Business Development":
-
-    st.title("💼 Business Development")
-
-    st.info("Detailed content arrives in Build 7.2")
+elif page == "🌱 Agriculture":
+    agriculture.show_page()
 
 # ============================================
 
