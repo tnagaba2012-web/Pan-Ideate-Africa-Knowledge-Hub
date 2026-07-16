@@ -95,7 +95,7 @@ page = st.sidebar.radio(
 
 st.sidebar.divider()
 
-st.sidebar.success("Version 7.1")
+st.sidebar.success("VERSION 999")
 
 # ============================================
 # HOME
