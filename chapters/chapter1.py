@@ -5,7 +5,7 @@ from chapters.chapter1_sections.section1_1 import show_section_1_1
 
 
 def show_chapter1():
-
+    st.error("✅ CHAPTER 1 HAS STARTED")
     st.title("📚 Chapter 1")
     st.subheader("Introduction to Minerals, Rocks and the Earth")
 
