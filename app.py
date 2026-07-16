@@ -108,11 +108,8 @@ if page == "🏠 Home":
 # MINERALS
 # ============================================
 
-elif page=="🧪 Minerals & Chemistry":
-
-    st.title("🧪 Minerals & Chemistry")
-
-    st.info("Detailed content arrives in Build 7.2")
+elif page == "🧪 Minerals & Chemistry":
+    minerals.show_page()
 
 # ============================================
 
