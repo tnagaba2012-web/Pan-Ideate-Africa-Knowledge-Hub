@@ -11,7 +11,7 @@ def show_page():
 
     st.header("📚 Uganda Minerals Master Handbook")
 
-    show_chapter1()
+    
 
     st.markdown("""
 - 🟤 Iron Oxide Pigments
