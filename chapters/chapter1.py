@@ -2,10 +2,10 @@ import streamlit as st
 
 # Import Chapter 1 Sections
 from chapters.chapter1_sections.section1_1 import show_section_1_1
-
+from chapters.chapter1_sections.section1_2 import show_section_1_2
 
 def show_chapter1():
-    st.error("✅ CHAPTER 1 HAS STARTED")
+    
     st.title("📚 Chapter 1")
     st.subheader("Introduction to Minerals, Rocks and the Earth")
 
@@ -33,6 +33,7 @@ def show_chapter1():
 
     if section == "1.1 Why This Handbook Exists":
         show_section_1_1()
-
+    elif section == "1.2 What Is the Earth?":
+        show_section_1_2()
     else:
         st.info("🚧 This section will be activated as we build the chapter.")
