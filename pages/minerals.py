@@ -1,5 +1,5 @@
 import streamlit as st
-from chapters.chapter1 import show_chapter1
+
 
 def show_page():
 
