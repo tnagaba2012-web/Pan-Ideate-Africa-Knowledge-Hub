@@ -34,6 +34,7 @@ def show_chapter1():
     if section == "1.1 Why This Handbook Exists":
         show_section_1_1()
     elif section == "1.2 What Is the Earth?":
+        st.error("🔥 You selected Section 1.2")
         show_section_1_2()
     else:
         st.info("🚧 This section will be activated as we build the chapter.")
