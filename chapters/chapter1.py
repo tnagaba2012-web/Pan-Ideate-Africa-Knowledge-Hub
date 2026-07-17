@@ -4,6 +4,7 @@ import streamlit as st
 from chapters.chapter1_sections.section1_1 import show_section_1_1
 from chapters.chapter1_sections.section1_2 import show_section_1_2
 from chapters.chapter1_sections.section1_3 import show_section_1_3
+from chapters.chapter1_sections.section1_4 import show_section_1_4
 def show_chapter1():
     
     st.title("📚 Chapter 1")
@@ -39,6 +40,7 @@ def show_chapter1():
 
     elif section == "1.3 Minerals, Rocks and Ores":
         show_section_1_3()
-
+    elif section == "1.4 The Rock Cycle":
+        show_section_1_4()
     else:
         st.info("🚧 This section will be activated as we build the chapter.")
