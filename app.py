@@ -3,6 +3,7 @@ from pages import home
 from pages import minerals
 from pages import agriculture
 from pages import business
+from pages import handbook
 from pages import ai
 from pages import learning
 from pages import innovation
@@ -76,7 +77,7 @@ page = st.sidebar.radio(
         "🏠 Home",
 
         "🧪 Minerals & Chemistry",
-
+        "📖 Uganda Minerals Handbook",
         "🌱 Agriculture",
 
         "💼 Business Development",
@@ -110,7 +111,8 @@ if page == "🏠 Home":
 
 elif page == "🧪 Minerals & Chemistry":
     minerals.show_page()
-
+elif page == "📖 Uganda Minerals Handbook":
+    handbook.show_page()
 # ============================================
 
 elif page == "🌱 Agriculture":
