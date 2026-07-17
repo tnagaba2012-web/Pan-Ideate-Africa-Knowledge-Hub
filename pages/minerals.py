@@ -1,5 +1,7 @@
 import streamlit as st
 
+from chapters.chapter1 import show_chapter1
+
 
 def show_page():
 
@@ -10,7 +12,7 @@ def show_page():
     st.divider()
 
     st.header("📚 Uganda Minerals Master Handbook")
-
+    show_chapter1()
     
 
     st.markdown("""
