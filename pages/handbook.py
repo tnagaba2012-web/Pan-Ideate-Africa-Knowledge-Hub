@@ -4,17 +4,22 @@ from chapters.chapter1 import show_chapter1
 def show_page():
     st.title("📖 Uganda Minerals Handbook")
 
-    st.markdown("""
+    st.info("""
 Welcome to the **Uganda Minerals Master Handbook**.
 
-This handbook has been developed by **Pan Ideate Africa Ltd.**
-to provide practical, scientific and industry-oriented knowledge
-about Uganda's mineral resources.
+This handbook is the official learning resource of **Pan Ideate Africa Ltd.**
 
-Use the section selector in the sidebar to navigate through each
-chapter.
-    """)
+📖 Read chapter by chapter.
 
-    st.divider()
+🧪 Learn practical mineral science.
 
-    show_chapter1()
+🇺🇬 Explore Uganda's mineral resources.
+
+🚀 Build innovation and industry through knowledge.
+
+Use the section selector in the sidebar to navigate through each chapter.
+""")
+
+st.divider()
+
+show_chapter1()
