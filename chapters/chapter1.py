@@ -3,7 +3,7 @@ import streamlit as st
 # Import Chapter 1 Sections
 from chapters.chapter1_sections.section1_1 import show_section_1_1
 from chapters.chapter1_sections.section1_2 import show_section_1_2
-
+from chapters.chapter1_sections.section1_3 import show_section_1_3
 def show_chapter1():
     
     st.title("📚 Chapter 1")
@@ -28,13 +28,17 @@ def show_chapter1():
             "1.10 Chapter Summary"
         ]
     )
-    st.write("DEBUG:", repr(section))
+   
     st.markdown("---")
 
-    if section == "1.1 Why This Handbook Exists":
-        show_section_1_1()
-    elif section == "1.2 What Is the Earth?":
-        st.error("🔥 You selected Section 1.2")
-        show_section_1_2()
-    else:
-        st.info("🚧 This section will be activated as we build the chapter.")
+if section == "1.1 Why This Handbook Exists":
+    show_section_1_1()
+
+elif section == "1.2 What Is the Earth?":
+    show_section_1_2()
+
+elif section == "1.3 Minerals, Rocks and Ores":
+    show_section_1_3()
+
+else:
+    st.info("🚧 This section will be activated as we build the chapter.")
