@@ -31,14 +31,14 @@ def show_chapter1():
    
     st.markdown("---")
 
-if section == "1.1 Why This Handbook Exists":
-    show_section_1_1()
+    if section == "1.1 Why This Handbook Exists":
+        show_section_1_1()
 
-elif section == "1.2 What Is the Earth?":
-    show_section_1_2()
+    elif section == "1.2 What Is the Earth?":
+        show_section_1_2()
 
-elif section == "1.3 Minerals, Rocks and Ores":
-    show_section_1_3()
+    elif section == "1.3 Minerals, Rocks and Ores":
+        show_section_1_3()
 
-else:
-    st.info("🚧 This section will be activated as we build the chapter.")
+    else:
+        st.info("🚧 This section will be activated as we build the chapter.")
