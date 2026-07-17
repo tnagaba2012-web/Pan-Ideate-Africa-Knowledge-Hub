@@ -1,7 +1,7 @@
 import streamlit as st
 
 def show_section_1_3():
-
+    st.success("✅ SECTION 1.3 FUNCTION IS RUNNING")
     st.header("1.3 Minerals, Rocks and Ores")
 
     st.markdown("---")
