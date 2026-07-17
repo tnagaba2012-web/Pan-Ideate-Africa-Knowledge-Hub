@@ -28,7 +28,7 @@ def show_chapter1():
             "1.10 Chapter Summary"
         ]
     )
-
+    st.write("DEBUG:", repr(section))
     st.markdown("---")
 
     if section == "1.1 Why This Handbook Exists":
