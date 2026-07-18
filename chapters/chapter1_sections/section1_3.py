@@ -31,31 +31,7 @@ enough to be mined economically. These are called ores.
 Understanding the relationship between minerals, rocks and ores is the foundation of
 geology, mining and mineral processing.
 """)
-st.markdown("---")
 
-st.subheader("📸 Common Minerals")
-
-st.info("Below are examples of important minerals discussed in this section.")
-
-col1, col2 = st.columns(2)
-
-with col1:
-    st.image("images/minerals/quartz.jpg",
-             caption="Quartz (SiO₂)",
-             use_container_width=True)
-
-    st.image("images/minerals/feldspar.jpg",
-             caption="Feldspar",
-             use_container_width=True)
-
-with col2:
-    st.image("images/minerals/mica.jpg",
-             caption="Mica",
-             use_container_width=True)
-
-    st.image("images/minerals/hematite.jpg",
-             caption="Hematite (Iron Ore)",
-             use_container_width=True)
     st.markdown("---")
 
     st.subheader("🧪 What is a Mineral?")
