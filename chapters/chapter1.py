@@ -12,7 +12,7 @@ def show_chapter1():
     st.subheader("Introduction to Minerals, Rocks and the Earth")
 
     st.success("Master Version 1.0")
-
+    st.error("🚨 THIS IS THE CHAPTER1.PY I AM EDITING")
     st.markdown("---")
 
     section = st.sidebar.selectbox(
