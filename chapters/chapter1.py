@@ -7,6 +7,7 @@ from chapters.chapter1_sections.section1_3 import show_section_1_3
 from chapters.chapter1_sections.section1_4 import show_section_1_4
 from chapters.chapter1_sections.section1_5 import show_section_1_5
 from chapters.chapter1_sections.section1_6 import show_section_1_6
+from chapters.chapter1_sections.section1_7 import show_section_1_7
 def show_chapter1():
     
     st.title("📚 Chapter 1")
@@ -48,6 +49,8 @@ def show_chapter1():
         show_section_1_5()
     elif section == "1.6 Mineral Classification":
         show_section_1_6()
+    elif section == "1.7 How Minerals Form":
+        show_section_1_7()    
     else:
         st.info("🚧 This section will be activated as we build the chapter.")
         
