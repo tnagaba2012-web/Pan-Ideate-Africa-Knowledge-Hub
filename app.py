@@ -78,6 +78,7 @@ page = st.sidebar.radio(
 
         "🧪 Minerals & Chemistry",
         "📖 Uganda Minerals Handbook",
+        "🗺️ Project Roadmap",
         "🌱 Agriculture",
 
         "💼 Business Development",
@@ -114,7 +115,37 @@ elif page == "🧪 Minerals & Chemistry":
 elif page == "📖 Uganda Minerals Handbook":
     handbook.show_page()
 # ============================================
+elif page == "🗺️ Project Roadmap":
 
+    st.title("🗺️ Pan Ideate Africa Project Roadmap")
+
+    st.success("Building Africa's Leading Science, Minerals & Innovation Knowledge Hub")
+
+    st.header("✅ Completed")
+    st.markdown("""
+- Streamlit Knowledge Hub
+- Chapter 1 Handbook
+- GitHub Backup
+- Stable Project Versions
+- Media Folder Structure
+""")
+
+    st.header("🚧 Currently Building")
+    st.markdown("""
+- Project Roadmap
+- Mineral Gallery
+- Educational Media Pack
+""")
+
+    st.header("🎯 Coming Next")
+    st.markdown("""
+- Uganda Minerals Gallery
+- Interactive Maps
+- Chemistry Diagrams
+- AI Assistant
+- Agriculture Innovation Centre
+- Innovation Marketplace
+""")
 elif page == "🌱 Agriculture":
     agriculture.show_page()
 
