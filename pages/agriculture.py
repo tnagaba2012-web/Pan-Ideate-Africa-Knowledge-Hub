@@ -4,7 +4,7 @@ def show_page():
   
 
     st.title("🌱 Agriculture Innovation Centre")
-    st.info("✅ Agriculture.py is running - Version A")
+   
     st.success("Building Africa's Future Through Science, Innovation and Sustainable Agriculture")
 
     st.markdown("""
@@ -171,7 +171,7 @@ Emerging opportunities
     st.divider()
 
 st.header("📈 Agricultural Innovation Dashboard")
-
+st.warning("🚨 Dashboard section reached!")
 col1, col2, col3, col4 = st.columns(4)
 
 with col1:
