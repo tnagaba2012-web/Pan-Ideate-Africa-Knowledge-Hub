@@ -187,7 +187,7 @@ with col4:
     st.metric("🌍 Sustainability", "100%")
 
 st.divider()
-st.error("REACHED LEARN MORE SECTION")
+
 st.header("📚 Learn More")
 
 with st.expander("🌱 Advanced Biochar Technology", expanded=False):
