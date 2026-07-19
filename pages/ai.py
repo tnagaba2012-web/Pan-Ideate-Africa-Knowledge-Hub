@@ -5,7 +5,7 @@ from components.explorer import show_explorer
 def show_page():
     st.success("✅ Pan Ideate AI v3.0 is running successfully!")
     show_explorer()
-    st.error("THIS IS THE NEW AI.PY 123")
+   
     st.markdown("""
 Welcome to **Pan Ideate AI**
 
