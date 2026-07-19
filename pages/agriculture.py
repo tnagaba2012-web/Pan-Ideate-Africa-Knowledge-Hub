@@ -171,7 +171,7 @@ Emerging opportunities
     st.divider()
 
 st.header("📈 Agricultural Innovation Dashboard")
-st.warning("🚨 Dashboard section reached!")
+
 col1, col2, col3, col4 = st.columns(4)
 
 with col1:
@@ -560,4 +560,3 @@ with right:
 st.success("""
 🌍 Pan Ideate Africa believes Uganda can become a continental leader in sustainable agriculture, mineral innovation and youth-led scientific entrepreneurship.
 """)
-st.error("END OF 561-LINE PAGE")
