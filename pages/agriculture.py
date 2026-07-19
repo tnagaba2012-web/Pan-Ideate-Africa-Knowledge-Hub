@@ -1,5 +1,8 @@
 import streamlit as st
-
+def technology_card(icon, title, description):
+    with st.container(border=True):
+        st.subheader(f"{icon} {title}")
+        st.write(description)
 
 def show_page():
 
@@ -85,8 +88,72 @@ food security and create sustainable businesses.
     with c4:
         st.metric("Focus", "Uganda & Africa")
 
-    st.divider()
+   st.divider()
 
-    st.success("✅ Agriculture Innovation Centre Version 1.0 Loaded Successfully")
+# ==========================================================
+# FEATURED TECHNOLOGIES
+# ==========================================================
 
-    st.caption("Pan Ideate Africa Ltd | Learn → Practice → Produce → Innovate → Earn")
+st.header("🚀 Featured Technologies")
+
+col1, col2 = st.columns(2)
+
+with col1:
+    technology_card(
+        "🔥",
+        "Biochar",
+        "Improve soil fertility, increase crop yields, retain moisture and store carbon."
+    )
+
+    technology_card(
+        "🪨",
+        "Kaolin",
+        "Used in crop protection, seed coating, moisture conservation and agricultural research."
+    )
+
+    technology_card(
+        "🧱",
+        "Bentonite",
+        "Excellent for water retention, livestock feed binders and fertilizer improvement."
+    )
+
+with col2:
+    technology_card(
+        "💧",
+        "Water Retention",
+        "Innovative technologies that help crops survive drought and reduce irrigation costs."
+    )
+
+    technology_card(
+        "🐄",
+        "Livestock Innovation",
+        "Modern animal nutrition, mineral supplements and sustainable livestock management."
+    )
+
+    technology_card(
+        "🌾",
+        "Climate Smart Agriculture",
+        "Technologies that increase productivity while adapting to climate change."
+    )
+
+st.divider()
+
+# ==========================================================
+# COMING NEXT
+# ==========================================================
+
+st.info("""
+🚀 Version 1.2 will introduce:
+
+• Uganda Agricultural Opportunities
+• Expandable Knowledge Library
+• Project Guides
+• Image Gallery
+• Interactive Learning Sections
+""")
+
+st.success("✅ Agriculture Innovation Centre Version 1.1 Running Successfully")
+
+st.caption(
+    "Pan Ideate Africa Ltd | Learn → Practice → Produce → Innovate → Earn"
+)
