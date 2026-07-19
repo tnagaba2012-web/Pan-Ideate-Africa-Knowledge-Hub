@@ -151,11 +151,8 @@ elif page == "🌱 Agriculture":
 
 # ============================================
 
-elif page=="🤖 Artificial Intelligence":
-
-    st.title("🤖 Artificial Intelligence")
-
-    st.info("AI Assistant arrives in Build 7.3")
+elif page == "🤖 Artificial Intelligence":
+    ai.show_page()
 
 # ============================================
 
