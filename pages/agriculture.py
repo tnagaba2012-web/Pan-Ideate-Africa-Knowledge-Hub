@@ -4,7 +4,7 @@ def show_page():
   
 
     st.title("🌱 Agriculture Innovation Centre")
-
+    st.info("✅ Agriculture.py is running - Version A")
     st.success("Building Africa's Future Through Science, Innovation and Sustainable Agriculture")
 
     st.markdown("""
