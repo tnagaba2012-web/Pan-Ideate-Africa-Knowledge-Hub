@@ -88,7 +88,7 @@ food security and create sustainable businesses.
     with c4:
         st.metric("Focus", "Uganda & Africa")
 
-   st.divider()
+st.divider()
 
 # ==========================================================
 # FEATURED TECHNOLOGIES
