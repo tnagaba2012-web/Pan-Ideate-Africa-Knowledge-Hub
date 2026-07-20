@@ -9,6 +9,7 @@ from pages import learning
 from pages import innovation
 from pages import contact
 from pages import languages
+from pages import donations
 # ============================================
 # PAGE CONFIGURATION
 # ============================================
@@ -81,7 +82,7 @@ page = st.sidebar.radio(
         "📖 Uganda Minerals Handbook",
         "🗺️ Project Roadmap",
         "🌱 Agriculture",
-
+        "❤️ Donations & Partnerships",
         "💼 Business Development",
 
         "🤖 Artificial Intelligence",
@@ -156,6 +157,8 @@ elif page == "🤖 Artificial Intelligence":
     ai.show_page()
 elif page == "🌍 African Languages":
     languages.show_page()
+elif page == "❤️ Donations & Partnerships":
+    donations.show_page()
 # ============================================
 
 elif page=="📚 Learning Centre":
