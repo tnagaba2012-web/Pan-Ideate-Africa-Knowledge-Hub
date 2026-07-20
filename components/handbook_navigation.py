@@ -12,6 +12,8 @@ def show_handbook_navigation():
         ]
     )
 
+    section = None
+
     if chapter == "Chapter 1 - Introduction to Minerals":
 
         section = st.selectbox(
@@ -26,8 +28,8 @@ def show_handbook_navigation():
                 "1.7 How Minerals Form",
                 "1.8 Minerals in Everyday Life",
                 "1.9 Introduction to Mineral Exploration",
-                "1.10 Chapter Summary",
-            ],
+                "1.10 Chapter Summary"
+            ]
         )
 
-    return section
+    return chapter, section
