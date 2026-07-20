@@ -77,7 +77,7 @@ page = st.sidebar.radio(
     [
 
         "🏠 Home",
-        "🌍 African Languages",  
+        "🌍 Choose a Language",  
         "🧪 Minerals & Chemistry",
         "📖 Uganda Minerals Handbook",
         "🗺️ Project Roadmap",
@@ -155,8 +155,9 @@ elif page == "🌱 Agriculture":
 
 elif page == "🤖 Artificial Intelligence":
     ai.show_page()
-elif page == "🌍 African Languages":
+elif page == "🌍 Choose a Language":
     languages.show_page()
+    
 elif page == "❤️ Donations & Partnerships":
     donations.show_page()
 # ============================================

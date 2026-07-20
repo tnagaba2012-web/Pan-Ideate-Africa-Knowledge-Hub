@@ -3,9 +3,9 @@ import streamlit as st
 
 def show_page():
 
-    st.title("🌍 African Languages Centre")
+    st.title("🌍 Choose Your Language")
 
-    st.success("African Languages Centre is connected successfully!")
+    st.success("Choose your preferred language below.")
 
     st.write("""
 Welcome to the African Languages Centre.
