@@ -7,9 +7,9 @@ def show_page():
    chapter, section = show_handbook_navigation()
    st.divider()
 
-if chapter == "Chapter 1 - Introduction to Minerals":
-    show_chapter1()
+   if chapter == "Chapter 1 - Introduction to Minerals":
+        show_chapter1()
 
-elif chapter == "Chapter 2 - Matter, Atoms and Elements":
-    from chapters.chapter2 import show_chapter2
-    show_chapter2()
+   elif chapter == "Chapter 2 - Matter, Atoms and Elements":
+        from chapters.chapter2 import show_chapter2
+        show_chapter2()
