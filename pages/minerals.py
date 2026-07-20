@@ -1,5 +1,5 @@
 import streamlit as st
-
+from knowledge.minerals import get_info
 from chapters.chapter1 import show_chapter1
 
 
@@ -11,13 +11,7 @@ def show_page():
 
     st.divider()
 
-   
+    st.markdown(get_info())
     
 
-    st.markdown("""
-- 🟤 Iron Oxide Pigments
-- ⚪ Kaolin
-- 🟢 Bentonite
-- 💎 Silicon
-- 🧂 Rock Salt
-""")
+  
