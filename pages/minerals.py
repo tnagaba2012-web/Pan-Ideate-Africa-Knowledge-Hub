@@ -11,8 +11,7 @@ def show_page():
 
     st.divider()
 
-    st.header("📚 Uganda Minerals Master Handbook")
-    show_chapter1()
+   
     
 
     st.markdown("""
