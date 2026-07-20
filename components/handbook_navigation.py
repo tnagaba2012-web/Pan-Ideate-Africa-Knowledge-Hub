@@ -6,11 +6,12 @@ def show_handbook_navigation():
     st.subheader("📚 Handbook Navigation")
 
     chapter = st.selectbox(
-        "Choose a Chapter",
-        [
-            "Chapter 1 - Introduction to Minerals"
-        ]
-    )
+    "Choose a Chapter",
+    [
+        "Chapter 1 - Introduction to Minerals",
+        "Chapter 2 - Matter, Atoms and Elements"
+    ]
+)
 
     section = None
 
@@ -31,6 +32,23 @@ def show_handbook_navigation():
                 "1.10 Chapter Summary"
             ]
         )
+    elif chapter == "Chapter 2 - Matter, Atoms and Elements":
+
+        section = st.selectbox(
+        "Choose a Section",
+        [
+            "2.1 What is Matter?",
+            "2.2 States of Matter",
+            "2.3 Atoms",
+            "2.4 Elements",
+            "2.5 The Periodic Table",
+            "2.6 Molecules and Compounds",
+            "2.7 Chemical Reactions",
+            "2.8 Mixtures and Separation Techniques",
+            "2.9 Matter in Minerals",
+            "2.10 Chapter Summary"
+        ]
+    )
     st.session_state["selected_section"] = section
     
     return chapter, section
