@@ -7,7 +7,7 @@ def show_page():
 
     st.success("African Languages Centre is connected successfully!")
 
-   st.write("""
+    st.write("""
 Welcome to the African Languages Centre.
 
 This module will gradually support:
