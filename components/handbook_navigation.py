@@ -31,5 +31,6 @@ def show_handbook_navigation():
                 "1.10 Chapter Summary"
             ]
         )
-
+    st.session_state["selected_section"] = section
+    
     return chapter, section

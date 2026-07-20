@@ -20,8 +20,10 @@ def show_chapter1():
    
     st.markdown("---")
 
-    section = st.selectbox(
-        "📚 Handbook Navigation",
+    section = st.session_state.get(
+    "selected_section",
+    st.selectbox(
+        "📖 Handbook Navigation",
         [
             "1.1 Why This Handbook Exists",
             "1.2 What Is the Earth?",
@@ -35,6 +37,7 @@ def show_chapter1():
             "1.10 Chapter Summary"
         ]
     )
+)
    
     st.markdown("---")
 

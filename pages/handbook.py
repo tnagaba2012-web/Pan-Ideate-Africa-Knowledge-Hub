@@ -7,4 +7,5 @@ def show_page():
    chapter, section = show_handbook_navigation()
    st.divider()
 
-show_chapter1()
+   if chapter == "Chapter 1 - Introduction to Minerals":
+    show_chapter1() 
