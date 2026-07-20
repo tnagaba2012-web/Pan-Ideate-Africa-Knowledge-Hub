@@ -17,7 +17,7 @@ This handbook is the official learning resource of **Pan Ideate Africa Ltd.**
 
 🚀 Build innovation and industry through knowledge.
 
-Use the section selector in the sidebar to navigate through each chapter.
+Use the Handbook Navigation below to explore each chapter.
 """)
 
 st.divider()

@@ -21,7 +21,7 @@ def show_chapter1():
     st.markdown("---")
 
     section = st.selectbox(
-        "Choose a Section",
+        "📚 Handbook Navigation",
         [
             "1.1 Why This Handbook Exists",
             "1.2 What Is the Earth?",
