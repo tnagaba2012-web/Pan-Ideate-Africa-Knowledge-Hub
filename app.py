@@ -99,7 +99,7 @@ page = st.sidebar.radio(
 
 st.sidebar.divider()
 
-st.sidebar.success("VERSION 999")
+st.sidebar.success("🚀 Empowering Africa Through Knowledge")
 
 # ============================================
 # HOME

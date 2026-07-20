@@ -20,7 +20,7 @@ def show_chapter1():
    
     st.markdown("---")
 
-    section = st.sidebar.selectbox(
+    section = st.selectbox(
         "Choose a Section",
         [
             "1.1 Why This Handbook Exists",
