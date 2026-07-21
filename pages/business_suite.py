@@ -1,33 +1,122 @@
 import streamlit as st
 
+
 def show_business_suite():
 
-    # Celebration 🎉
+    # --------------------------------------------------
+    # PAGE CONFIGURATION
+    # --------------------------------------------------
+
     st.balloons()
 
     st.title("💼 Pan Ideate Africa Business Suite")
 
+    st.caption("Learn → Innovate → Produce → Manage → Sell → Prosper")
+
     st.success("""
-🎉 Welcome to the Business Suite!
+🎉 Welcome to the Pan Ideate Africa Business Suite!
 
 This is where science meets entrepreneurship.
 
-Learn...
-Build...
-Manage...
-Grow...
+Whether you produce:
 
-Whether you produce Biochar, Kaolin, Bentonite, Iron Oxide Pigments,
-Agricultural Products or any other innovation,
-this platform will help you transform knowledge into successful businesses.
+🌱 Biochar
+
+🏺 Kaolin
+
+🟤 Iron Oxide Pigments
+
+🧪 Bentonite Products
+
+🌾 Agricultural Products
+
+or any other innovation,
+
+this platform helps transform knowledge into successful businesses.
 """)
 
     st.markdown("---")
 
+    # --------------------------------------------------
+    # BUSINESS DASHBOARD
+    # --------------------------------------------------
+
+    st.header("📊 Business Dashboard")
+
+    col1, col2, col3, col4 = st.columns(4)
+
+    with col1:
+        st.metric(
+            label="👥 Members",
+            value="1,245",
+            delta="+42"
+        )
+
+    with col2:
+        st.metric(
+            label="📚 Courses",
+            value="86",
+            delta="+4"
+        )
+
+    with col3:
+        st.metric(
+            label="💼 Projects",
+            value="18",
+            delta="+2"
+        )
+
+    with col4:
+        st.metric(
+            label="🌍 Countries",
+            value="12",
+            delta="+1"
+        )
+
+    st.markdown("---")
+
+    # --------------------------------------------------
+    # QUICK ACTIONS
+    # --------------------------------------------------
+
+    st.header("🚀 Quick Actions")
+
+    c1, c2, c3 = st.columns(3)
+
+    with c1:
+
+        st.button("🛒 Marketplace")
+
+        st.button("📦 Inventory")
+
+        st.button("💰 Sales")
+
+    with c2:
+
+        st.button("👥 Customers")
+
+        st.button("🧾 Invoices")
+
+        st.button("📊 Reports")
+
+    with c3:
+
+        st.button("🤖 AI Assistant")
+
+        st.button("🎓 Learning Centre")
+
+        st.button("⚙️ Settings")
+
+    st.markdown("---")
+
+    # --------------------------------------------------
+    # OUR MISSION
+    # --------------------------------------------------
+
     st.header("🌍 Our Mission")
 
     st.info("""
-Pan Ideate Africa believes that learning should not stop in the classroom.
+Pan Ideate Africa believes learning should not stop in the classroom.
 
 Knowledge should become:
 
@@ -41,110 +130,275 @@ Knowledge should become:
 
 ✅ Prosperity
 
-This Business Suite helps innovators manage every stage of their journey.
+Our mission is to empower Africans with practical scientific knowledge that creates sustainable businesses and improves lives.
 """)
+        # --------------------------------------------------
+    # BUSINESS MODULES
+    # --------------------------------------------------
 
-    st.markdown("---")
+    st.header("💼 Business Modules")
 
-    st.header("🚀 Business Modules")
+    left, right = st.columns(2)
 
-    col1, col2 = st.columns(2)
+    with left:
 
-    with col1:
+        st.success("🛒 Marketplace")
+        st.write("Sell products across Uganda and Africa.")
 
         st.success("📦 Inventory Management")
-        st.write("Track stock, purchases, production and low-stock alerts.")
+        st.write("Monitor stock, production and low-stock alerts.")
 
         st.success("💰 Sales Management")
-        st.write("Monitor daily, weekly, monthly and yearly sales.")
+        st.write("Track daily, weekly and monthly sales.")
 
         st.success("👥 Customer Management")
         st.write("Store customer information and purchase history.")
 
         st.success("🧾 Invoice & Receipt Generator")
-        st.write("Generate quotations, invoices and receipts.")
+        st.write("Create quotations, invoices and receipts.")
 
-        st.success("💸 Expense Management")
-        st.write("Track business expenses and improve profitability.")
-
-    with col2:
-
-        st.success("🛒 Marketplace")
-        st.write("Advertise and sell products across Africa.")
-
-        st.success("📊 Reports & Analytics")
-        st.write("Generate business reports and performance summaries.")
+    with right:
 
         st.success("👨‍💼 Employee Management")
         st.write("Manage staff records and attendance.")
 
+        st.success("💸 Expense Management")
+        st.write("Track business expenses and profitability.")
+
+        st.success("📊 Reports & Analytics")
+        st.write("Generate professional business reports.")
+
         st.success("🤖 AI Business Assistant")
         st.write("Receive intelligent business guidance.")
 
-        st.success("⭐ Premium Business Tools")
-        st.write("Advanced business features available through subscription.")
+        st.success("🌍 African Marketplace")
+        st.write("Connect buyers and sellers across Africa.")
 
     st.markdown("---")
 
-    st.header("💎 Subscription Plans")
+    # --------------------------------------------------
+    # SUBSCRIPTION CENTRE
+    # --------------------------------------------------
 
-    st.table({
+    st.header("💳 Membership & Subscription Plans")
 
-        "Plan":[
-            "🟢 Free Explorer",
-            "🔵 Student",
-            "🟠 Professional",
-            "👑 Enterprise"
-        ],
+    free, student, pro, enterprise = st.columns(4)
 
-        "Ideal For":[
-            "Everyone",
-            "Schools & Universities",
-            "Entrepreneurs",
-            "Companies & Organisations"
-        ],
+    with free:
+        st.success("🟢 FREE")
+        st.write("""
+✔ Basic Handbook
 
-        "Features":[
-            "Basic Learning",
-            "Full Courses + Quizzes",
-            "Business Suite + Premium Guides",
-            "Complete Platform + AI + Marketplace"
-        ]
+✔ Community Access
 
-    })
+✔ Basic AI
+
+✔ News Updates
+""")
+
+    with student:
+        st.info("🔵 STUDENT")
+        st.write("""
+✔ Everything in FREE
+
+✔ Full Courses
+
+✔ Quizzes
+
+✔ Certificates
+""")
+
+    with pro:
+        st.warning("🟠 PROFESSIONAL")
+        st.write("""
+✔ Everything in STUDENT
+
+✔ Business Suite
+
+✔ Production Guides
+
+✔ Premium Downloads
+""")
+
+    with enterprise:
+        st.error("👑 ENTERPRISE")
+        st.write("""
+✔ Everything Included
+
+✔ AI Business Tools
+
+✔ Marketplace
+
+✔ Team Accounts
+
+✔ Analytics
+
+✔ Priority Support
+""")
+
+    st.markdown("---")
+
+    # --------------------------------------------------
+    # PREMIUM FEATURES
+    # --------------------------------------------------
+
+    st.header("🔒 Premium Features")
+
+    st.info("""
+Premium Members will unlock:
+
+⭐ Advanced Production Manuals
+
+⭐ Business Templates
+
+⭐ Equipment Guides
+
+⭐ Market Intelligence
+
+⭐ AI Business Planning
+
+⭐ Downloadable Professional PDFs
+
+⭐ Premium Video Lessons
+
+⭐ Investor Resources
+""")
+        # --------------------------------------------------
+    # AFRICAN INNOVATION SPOTLIGHT
+    # --------------------------------------------------
+
+    st.markdown("---")
+
+    st.header("🌍 African Innovation Spotlight")
+
+    st.success("""
+## 🇺🇬 Opportunity of the Week
+
+### 🏺 KAOLIN
+
+Transform Uganda's natural kaolin into:
+
+🏺 Ceramic products
+
+🎨 Paint fillers
+
+📄 Paper coating materials
+
+💄 Cosmetic products
+
+🏗️ Construction materials
+
+💼 Every natural resource is an opportunity to create value through science and innovation.
+""")
+
+    # --------------------------------------------------
+    # PAN IDEATE AFRICA JOURNEY
+    # --------------------------------------------------
+
+    st.markdown("---")
+
+    st.header("🏆 Your Pan Ideate Africa Journey")
+
+    st.info("""
+🌱 Curious Learner
+
+⬇
+
+🔬 Science Explorer
+
+⬇
+
+🧪 Practical Scientist
+
+⬇
+
+🏭 Product Developer
+
+⬇
+
+💼 Entrepreneur
+
+⬇
+
+🌍 African Innovator
+
+⬇
+
+👑 Pan Ideate Africa Ambassador
+""")
+
+    # --------------------------------------------------
+    # AI ASSISTANT
+    # --------------------------------------------------
+
+    st.markdown("---")
+
+    st.header("🤖 Meet Your AI Business Assistant")
+
+    st.success("""
+Hello!
+
+What would you like to build today?
+
+🌱 Biochar
+
+🏺 Kaolin
+
+🧪 Bentonite
+
+🎨 Iron Oxide Pigments
+
+🌾 Agricultural Products
+
+💼 Business Plans
+
+📊 Cost Calculations
+
+📈 Market Opportunities
+
+Your AI Assistant will continue to grow with the Pan Ideate Africa platform.
+""")
+
+    # --------------------------------------------------
+    # FUTURE FEATURES
+    # --------------------------------------------------
+
+    st.markdown("---")
+
+    st.header("🚀 Coming Soon")
+
+    st.warning("""
+The Business Suite will continue expanding with:
+
+🗺️ Uganda Mineral Atlas
+
+🌍 African Marketplace
+
+📱 Mobile App
+
+🎓 Professional Certification
+
+🤝 Investor Portal
+
+💳 Online Subscriptions
+
+🧠 Advanced AI Assistant
+
+📊 Live Business Analytics
+""")
+
+    # --------------------------------------------------
+    # FOOTER
+    # --------------------------------------------------
 
     st.markdown("---")
 
     st.success("""
-🌱 Learn → Innovate → Produce → Manage → Sell → Prosper
+## 🌍 Pan Ideate Africa Vision
 
-This is the vision of Pan Ideate Africa.
-""")
+Learn → Innovate → Produce → Manage → Sell → Prosper
 
-    st.info("""
-🇺🇬 Future Features
+Together, we are building an African platform where science, innovation, entrepreneurship and technology work together to create opportunities for everyone.
 
-🗺 Uganda Mineral Atlas
-
-🎓 Certificates
-
-🌍 Community Network
-
-📚 Research Library
-
-📱 Mobile App
-
-🤝 Investor Portal
-
-🌐 African Marketplace
-
-The journey has only just begun...
-""")
-
-    st.warning("""
-🚧 Coming Soon
-
-Each Business Suite module will be developed individually.
-
-Today's page is the foundation for one of the most powerful features in the Pan Ideate Africa Knowledge Hub.
+Thank you for being part of the journey. 🚀
 """)
