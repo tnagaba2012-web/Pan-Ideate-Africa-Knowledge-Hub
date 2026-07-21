@@ -3,7 +3,18 @@ import streamlit as st
 def show_section2_10():
 
     st.header("🧪 2.10 Chemical Symbols, Formulae and Equations")
+# 🎉 Celebration
+    st.balloons()
 
+    st.success("""
+🎉 Welcome to Section 2.10!
+
+Congratulations on reaching one of the most exciting parts of the Pan Ideate Africa Chemistry Handbook!
+
+From this point onward, you will begin learning the **language of chemistry**—the same language used by scientists, engineers, doctors, manufacturers, and innovators all over the world.
+
+🚀 Get ready to unlock the secrets behind minerals, biochar, kaolin, fertilizers, pigments, ceramics, and many more exciting projects!
+""")
     st.markdown("""
 # 🎯 Learning Objectives
 
