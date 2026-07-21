@@ -2,7 +2,7 @@ import streamlit as st
 from pages import home
 from pages import minerals
 from pages import agriculture
-from pages import business
+from pages import business_suite
 from pages import handbook
 from pages import ai
 from pages import learning
@@ -83,8 +83,8 @@ page = st.sidebar.radio(
         "🗺️ Project Roadmap",
         "🌱 Agriculture",
         "❤️ Donations & Partnerships",
-        "💼 Business Development",
-
+        "💼 Business Suite",
+ 
         "🤖 Artificial Intelligence",
 
         "📚 Learning Centre",
@@ -152,7 +152,12 @@ elif page == "🌱 Agriculture":
     agriculture.show_page()
 
 # ============================================
+# ============================================
+# BUSINESS SUITE
+# ============================================
 
+elif page == "💼 Business Suite":
+    business_suite.show_business_suite()
 elif page == "🤖 Artificial Intelligence":
     ai.show_page()
 elif page == "🌍 Choose a Language":
@@ -203,7 +208,7 @@ st.markdown(
 
 © 2026 Pan Ideate Africa Ltd.
 
-Version 7 • Build 7.1
+Version 8 • Build 8.0
 
 </div>
 """,
