@@ -2,7 +2,7 @@ import streamlit as st
 from pages import home
 from pages import minerals
 from pages import agriculture
-from pages import business_suite
+from pages import business_suite_modules
 from pages import handbook
 from pages import ai
 from pages import learning
@@ -157,7 +157,7 @@ elif page == "🌱 Agriculture":
 # ============================================
 
 elif page == "💼 Business Suite":
-    business_suite.show_business_suite()
+    business_suite_modules.show_business_suite()
 elif page == "🤖 Artificial Intelligence":
     ai.show_page()
 elif page == "🌍 Choose a Language":
