@@ -115,7 +115,8 @@ if st.session_state.inventory:
 
 else:
 
-    st.info("No products have been added yet.")st.markdown("---")
+    st.info("No products have been added yet.")
+    st.markdown("---")
 
 st.header("📋 Inventory")
 
