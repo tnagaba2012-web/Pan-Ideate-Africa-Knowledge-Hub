@@ -1,5 +1,6 @@
 import streamlit as st
-
+if "inventory" not in st.session_state:
+    st.session_state.inventory = []
 
 def show():
 
@@ -62,3 +63,66 @@ Future inventory features will include:
 
 ✅ Production planning
 """)
+    st.markdown("---")
+
+st.header("➕ Add Product")
+
+product = st.text_input("Product Name")
+
+category = st.selectbox(
+    "Category",
+    [
+        "Raw Material",
+        "Finished Product",
+        "Chemical",
+        "Equipment"
+    ]
+)
+
+quantity = st.number_input(
+    "Quantity",
+    min_value=0,
+    value=0
+)
+
+price = st.number_input(
+    "Unit Price (UGX)",
+    min_value=0
+)
+
+supplier = st.text_input("Supplier")
+
+if st.button("Save Product"):
+
+    st.session_state.inventory.append(
+        {
+            "Product": product,
+            "Category": category,
+            "Quantity": quantity,
+            "Price": price,
+            "Supplier": supplier
+        }
+    )
+
+    st.success("✅ Product saved successfully!")
+    st.markdown("---")
+
+st.header("📋 Inventory")
+
+if st.session_state.inventory:
+
+    st.table(st.session_state.inventory)
+
+else:
+
+    st.info("No products have been added yet.")st.markdown("---")
+
+st.header("📋 Inventory")
+
+if st.session_state.inventory:
+
+    st.table(st.session_state.inventory)
+
+else:
+
+    st.info("No products have been added yet.")
