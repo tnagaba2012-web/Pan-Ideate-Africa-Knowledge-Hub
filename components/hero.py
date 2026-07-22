@@ -38,5 +38,21 @@ opportunities across Uganda and Africa.
     st.info(
     "💡 Learn • Innovate • Practice • Produce • Earn"
 )
+    st.success("""
+### 🚀 Welcome to Pan Ideate Africa
 
+Building Africa's future through:
+
+🧪 Science & Innovation
+
+🌱 Agriculture
+
+🤖 Artificial Intelligence
+
+💼 Entrepreneurship
+
+📚 Knowledge & Skills
+
+Together we learn, innovate, build and prosper.
+""")
     st.divider()
