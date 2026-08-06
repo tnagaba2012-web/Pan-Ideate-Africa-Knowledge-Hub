@@ -2,10 +2,7 @@ import streamlit as st
 
 def formation():
     st.markdown("""
-import streamlit as st
 
-def formation():
-    st.markdown("""
 ## 2.2 Formation of Iron Oxide Deposits
 
 Iron oxide deposits are formed through a variety of geological processes that operate over long periods of geological time. The type, purity, colour, and distribution of iron oxide pigments depend on the conditions under which they formed.
@@ -31,5 +28,4 @@ Volcanic rocks commonly contain iron-bearing minerals. As these rocks cool and l
 ### Science Insight
 
 Different geological environments produce iron oxide pigments with different colours, particle sizes, mineral compositions, and industrial properties.
-""")
 """)
