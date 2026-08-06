@@ -10,6 +10,7 @@ from pages import innovation
 from pages import contact
 from pages import languages
 from pages import donations
+from pages import iron_oxide
 # ============================================
 # PAGE CONFIGURATION
 # ============================================
@@ -84,7 +85,7 @@ page = st.sidebar.radio(
         "🌱 Agriculture",
         "❤️ Donations & Partnerships",
         "💼 Business Suite",
- 
+        "🟥 Iron Oxide Pigments Handbook",
         "🤖 Artificial Intelligence",
 
         "📚 Learning Centre",
@@ -116,6 +117,8 @@ elif page == "🧪 Minerals & Chemistry":
     minerals.show_page()
 elif page == "📖 Uganda Minerals Handbook":
     handbook.show_page()
+elif page == "🟥 Iron Oxide Pigments Handbook":
+    iron_oxide.show_page()
 # ============================================
 elif page == "🗺️ Project Roadmap":
 
