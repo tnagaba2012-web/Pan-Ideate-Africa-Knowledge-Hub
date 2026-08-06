@@ -76,8 +76,7 @@ def show_handbook():
         show_how_to_use()    
     elif chapter == "Chapter 1 - Introduction":
         show_chapter1()
-    if chapter == "Chapter 1 - Introduction":
-        show_chapter1()
+    
 
     elif chapter == "Chapter 2 - Geology & Mineralogy":
         show_chapter2()
