@@ -13,6 +13,14 @@ from iron_oxide_handbook.chapter10 import show_chapter10
 from iron_oxide_handbook.chapter11 import show_chapter11
 from iron_oxide_handbook.chapter12 import show_chapter12
 from iron_oxide_handbook.cover import show_cover
+from iron_oxide_handbook.title_page import show_title_page
+from iron_oxide_handbook.copyright import show_copyright
+from iron_oxide_handbook.disclaimer import show_disclaimer
+from iron_oxide_handbook.dedication import show_dedication
+from iron_oxide_handbook.acknowledgements import show_acknowledgements
+from iron_oxide_handbook.foreword import show_foreword
+from iron_oxide_handbook.preface import show_preface
+from iron_oxide_handbook.how_to_use import show_how_to_use
 
 
 def show_handbook():
@@ -25,7 +33,16 @@ def show_handbook():
         [
             
             "📕 Cover Page",
+            "Title Page",
+            "Copyright",
+            "⚠️ Disclaimer",
+            "🙏 Dedication",
+            "🤝 Acknowledgements",
+            "✍️ Foreword",
+            "📖 Preface",
+            "📘 How to Use This Handbook",
             "Chapter 1 - Introduction",
+
             "Chapter 2 - Geology & Mineralogy",
             "Chapter 3 - Chemistry",
             "Chapter 4 - Exploration",
@@ -41,7 +58,22 @@ def show_handbook():
     )
     if chapter == "📕 Cover Page":
         show_cover()
-
+    elif chapter == "Title Page":
+        show_title_page()
+    elif chapter == "📜 Copyright":
+        show_copyright()
+    elif chapter == "⚠️ Disclaimer":
+        show_disclaimer()
+    elif chapter == "🙏 Dedication":
+        show_dedication()
+    elif chapter == "🤝 Acknowledgements":
+        show_acknowledgements()   
+    elif chapter == "✍️ Foreword":
+        show_foreword()
+    elif chapter == "📖 Preface":
+        show_preface()
+    elif chapter == "📘 How to Use This Handbook":
+        show_how_to_use()    
     elif chapter == "Chapter 1 - Introduction":
         show_chapter1()
     if chapter == "Chapter 1 - Introduction":
