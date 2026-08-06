@@ -26,8 +26,8 @@ from iron_oxide_handbook.how_to_use import show_how_to_use
 def show_handbook():
 
     st.title("🟥 Iron Oxide Pigments Handbook")
-    st.subheader("📚 Table of Contents")
-    st.write("Select a chapter to begin reading:")
+    st.subheader("📘 Handbook Navigation")
+    st.write("Select a section of the handbook:")
     chapter = st.selectbox(
         "Select Chapter",
         [
