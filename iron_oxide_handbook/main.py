@@ -12,15 +12,19 @@ from iron_oxide_handbook.chapter9 import show_chapter9
 from iron_oxide_handbook.chapter10 import show_chapter10
 from iron_oxide_handbook.chapter11 import show_chapter11
 from iron_oxide_handbook.chapter12 import show_chapter12
+from iron_oxide_handbook.cover import show_cover
 
 
 def show_handbook():
 
     st.title("🟥 Iron Oxide Pigments Handbook")
-
-    chapter = st.sidebar.selectbox(
+    st.subheader("📚 Table of Contents")
+    st.write("Select a chapter to begin reading:")
+    chapter = st.selectbox(
         "Select Chapter",
         [
+            
+            "📕 Cover Page",
             "Chapter 1 - Introduction",
             "Chapter 2 - Geology & Mineralogy",
             "Chapter 3 - Chemistry",
@@ -35,7 +39,11 @@ def show_handbook():
             "Chapter 12 - Uganda Resource Atlas",
         ],
     )
+    if chapter == "📕 Cover Page":
+        show_cover()
 
+    elif chapter == "Chapter 1 - Introduction":
+        show_chapter1()
     if chapter == "Chapter 1 - Introduction":
         show_chapter1()
 
