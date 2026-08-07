@@ -11,6 +11,7 @@ from pages import contact
 from pages import languages
 from pages import donations
 from pages import iron_oxide
+from pigment_preparation.main import show_pigment_preparation
 # ============================================
 # PAGE CONFIGURATION
 # ============================================
@@ -86,6 +87,7 @@ page = st.sidebar.radio(
         "❤️ Donations & Partnerships",
         "💼 Business Suite",
         "🟥 Iron Oxide Pigments Handbook",
+        "🧪 Pigment Preparation Laboratory",
         "🤖 Artificial Intelligence",
 
         "📚 Learning Centre",
@@ -119,6 +121,8 @@ elif page == "📖 Uganda Minerals Handbook":
     handbook.show_page()
 elif page == "🟥 Iron Oxide Pigments Handbook":
     iron_oxide.show_page()
+elif page == "🧪 Pigment Preparation Laboratory":
+    show_pigment_preparation()
 # ============================================
 elif page == "🗺️ Project Roadmap":
 
