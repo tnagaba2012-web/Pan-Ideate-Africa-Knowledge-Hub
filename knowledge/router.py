@@ -1,5 +1,9 @@
 from knowledge.biochar import get_info as get_biochar_info
 from knowledge.minerals import get_info as get_minerals_info
+from knowledge.iron_oxide import get_info as get_iron_oxide_info
+
+from pigment_preparation.introduction import get_info as get_pigment_intro
+from pigment_preparation.pigment_types import get_info as get_pigment_types
 
 
 def ask_ai(question):
@@ -10,6 +14,41 @@ def ask_ai(question):
     # -----------------------------
     if "biochar" in question:
         return get_biochar_info()
+
+    # -----------------------------
+    # PIGMENT TYPES
+    # -----------------------------
+    if any(keyword in question for keyword in [
+        "pigment types",
+        "types of pigments",
+        "red iron oxide",
+        "yellow iron oxide",
+        "black iron oxide",
+        "brown iron oxide",
+    ]):
+        return get_pigment_types()
+
+    # -----------------------------
+    # PIGMENT INTRODUCTION
+    # -----------------------------
+    if any(keyword in question for keyword in [
+        "pigment",
+        "pigments",
+        "iron oxide",
+        "pigment preparation",
+        "pigment laboratory",
+    ]):
+        return get_pigment_intro()
+
+    # -----------------------------
+    # IRON OXIDE
+    # -----------------------------
+    if any(keyword in question for keyword in [
+        "hematite",
+        "iron ore",
+        "iron oxide mineral",
+    ]):
+        return get_iron_oxide_info()
 
     # -----------------------------
     # MINERALS
@@ -26,8 +65,6 @@ def ask_ai(question):
         "rock salt",
         "salt",
         "limestone",
-        "iron",
-        "iron ore",
         "gold",
         "copper",
         "graphite",
@@ -43,20 +80,22 @@ def ask_ai(question):
         "construction",
         "chemistry",
         "chemical",
-        "formula"
+        "formula",
     ]):
         return get_minerals_info()
 
     # -----------------------------
-    # DEFAULT RESPONSE
+    # DEFAULT
     # -----------------------------
     return """
 Sorry, I don't know that yet.
 
 Pan Ideate AI is still learning.
 
-Available topics:
+Currently I can answer questions about:
 
 • Biochar
 • Minerals
+• Iron Oxide Pigments
+• Pigment Types
 """

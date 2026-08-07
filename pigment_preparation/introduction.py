@@ -32,3 +32,27 @@ support learning, research and industrial innovation.
 """)
 
     st.success("🎯 Goal: Learn → Practice → Produce → Innovate")
+def get_info():
+    return """
+Iron oxide pigments are among the most important inorganic pigments used worldwide.
+
+They are valued because they have:
+• Excellent colour stability
+• Weather resistance
+• Non-toxicity
+• High durability
+• Low cost
+
+The Iron Oxide Pigment Preparation Laboratory teaches:
+
+• Types of iron oxide pigments
+• Natural and synthetic preparation methods
+• Raw materials
+• Processing equipment
+• Quality control
+• Industrial applications
+• Safety during pigment preparation
+
+Goal:
+Learn → Practice → Produce → Innovate
+"""

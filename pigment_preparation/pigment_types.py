@@ -76,3 +76,27 @@ Purple iron oxide pigments are specialty pigments used in premium decorative fin
 - Decorative coatings
 - Artistic products
 """)
+def get_info():
+    return """
+Iron oxide pigments are available in several major types.
+
+Main pigment types:
+
+• Red Iron Oxide (Fe₂O₃)
+  - Most widely used
+  - Used in bricks, paints, concrete and ceramics
+
+• Yellow Iron Oxide (FeOOH)
+  - Bright yellow colour
+  - Used in decorative coatings and plastics
+
+• Black Iron Oxide (Fe₃O₄)
+  - Deep black pigment
+  - Used in inks, coatings and magnetic materials
+
+• Brown Iron Oxide
+  - Blend of red, yellow and black oxides
+  - Used in tiles and construction materials
+
+Each pigment type has different colour properties, particle size, stability and industrial applications.
+"""
