@@ -1,5 +1,5 @@
 import streamlit as st
-
+from pages.business_suite_modules import subscriptions
 
 def show_business_suite():
 
@@ -177,64 +177,11 @@ Our mission is to empower Africans with practical scientific knowledge that crea
     st.markdown("---")
 
     # --------------------------------------------------
-    # SUBSCRIPTION CENTRE
-    # --------------------------------------------------
+  # ============================================================
+# MEMBERSHIP & SUBSCRIPTIONS
+# ============================================================
 
-    st.header("💳 Membership & Subscription Plans")
-
-    free, student, pro, enterprise = st.columns(4)
-
-    with free:
-        st.success("🟢 FREE")
-        st.write("""
-✔ Basic Handbook
-
-✔ Community Access
-
-✔ Basic AI
-
-✔ News Updates
-""")
-
-    with student:
-        st.info("🔵 STUDENT")
-        st.write("""
-✔ Everything in FREE
-
-✔ Full Courses
-
-✔ Quizzes
-
-✔ Certificates
-""")
-
-    with pro:
-        st.warning("🟠 PROFESSIONAL")
-        st.write("""
-✔ Everything in STUDENT
-
-✔ Business Suite
-
-✔ Production Guides
-
-✔ Premium Downloads
-""")
-
-    with enterprise:
-        st.error("👑 ENTERPRISE")
-        st.write("""
-✔ Everything Included
-
-✔ AI Business Tools
-
-✔ Marketplace
-
-✔ Team Accounts
-
-✔ Analytics
-
-✔ Priority Support
-""")
+    subscriptions.show()
 
     st.markdown("---")
 
