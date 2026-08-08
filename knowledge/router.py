@@ -1,3 +1,6 @@
+import os
+from dotenv import load_dotenv
+from openai import OpenAI
 from knowledge.biochar import get_info as get_biochar_info
 from knowledge.minerals import get_info as get_minerals_info
 from knowledge.iron_oxide import get_info as get_iron_oxide_info
@@ -6,6 +9,9 @@ from pigment_preparation.introduction import get_info as get_pigment_intro
 from pigment_preparation.pigment_types import get_info as get_pigment_types
 from knowledge.agriculture import get_info as get_agriculture_info
 from knowledge.business import answer_business
+
+load_dotenv()
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 def ask_ai(question):
     question = question.lower()
@@ -140,17 +146,51 @@ def ask_ai(question):
         return get_minerals_info()
 
     # -----------------------------
-    # DEFAULT
-    # -----------------------------
-    return """
-Sorry, I don't know that yet.
+      # ============================================================
+    # AI FALLBACK
+    # ============================================================
 
-Pan Ideate AI is still learning.
+    try:
+        response = client.responses.create(
+            model="gpt-5-mini",
+            instructions="""
+You are Pan Ideate AI, the intelligent assistant of the
+Pan Ideate Africa Knowledge Hub.
 
-Currently I can answer questions about:
+Your focus is Africa, especially Uganda and East Africa.
 
-• Biochar
-• Minerals
-• Iron Oxide Pigments
-• Pigment Types
+Help users with:
+- Minerals and geology
+- Chemistry
+- Agriculture
+- Biochar
+- Kaolin and bentonite
+- Iron oxide pigments
+- Manufacturing
+- Entrepreneurship and business
+- Innovation
+- Science education
+- African languages and learning
+
+Give clear, practical and educational answers.
+When discussing chemistry, minerals, agriculture or production,
+include appropriate safety and environmental considerations.
+
+Do not pretend that an answer comes from the Pan Ideate
+Knowledge Hub when it does not. Clearly distinguish general
+AI knowledge from information contained in the Hub.
+""",
+            input=question
+        )
+
+        return response.output_text
+
+    except Exception as e:
+        return f"""
+Pan Ideate AI could not connect to the AI service right now.
+
+Please check your internet connection and OpenAI API key.
+
+Technical message:
+{e}
 """

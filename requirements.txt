@@ -3,3 +3,4 @@ folium
 streamlit-folium
 pandas
 openai
+python-dotenv
