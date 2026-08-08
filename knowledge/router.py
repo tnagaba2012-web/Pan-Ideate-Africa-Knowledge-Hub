@@ -4,6 +4,7 @@ from knowledge.iron_oxide import get_info as get_iron_oxide_info
 
 from pigment_preparation.introduction import get_info as get_pigment_intro
 from pigment_preparation.pigment_types import get_info as get_pigment_types
+from knowledge.agriculture import get_info as get_agriculture_info
 
 
 def ask_ai(question):
@@ -14,7 +15,28 @@ def ask_ai(question):
     # -----------------------------
     if "biochar" in question:
         return get_biochar_info()
-
+          # AGRICULTURE
+    if any(keyword in question for keyword in [
+        "agriculture",
+        "agricultural",
+        "farming",
+        "farmer",
+        "sustainable agriculture",
+        "water retention",
+        "drought",
+        "irrigation",
+        "livestock",
+        "animal nutrition",
+        "climate smart",
+        "climate-smart",
+        "mineral technologies in agriculture",
+        "agricultural opportunities",
+        "agricultural knowledge",
+        "agricultural project",
+        "agriculture project",
+        "interactive learning"
+    ]):
+        return get_agriculture_info()
     # -----------------------------
     # PIGMENT TYPES
     # -----------------------------
