@@ -41,7 +41,7 @@ elif page == "💼 Business Development":
     show_page()
 
 elif page == "🤖 Artificial Intelligence":
-    from pages.ai import show_page
+    from pages.artificial_intelligence import show_page
     show_page()
 
 elif page == "📚 Learning Centre":

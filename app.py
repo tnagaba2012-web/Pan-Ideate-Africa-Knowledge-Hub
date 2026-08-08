@@ -4,7 +4,7 @@ from pages import minerals
 from pages import agriculture
 from pages import business_suite
 from pages import handbook
-from pages import ai
+from pages import artificial_intelligence
 from pages import learning
 from pages import innovation
 from pages import contact
@@ -166,7 +166,7 @@ elif page == "🌱 Agriculture":
 elif page == "💼 Business Suite":
    business_suite.show_business_suite()
 elif page == "🤖 Artificial Intelligence":
-    ai.show_page()
+    artificial_intelligence.show_page()
 elif page == "🌍 Choose a Language":
     languages.show_page()
     
