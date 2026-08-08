@@ -5,7 +5,7 @@ from knowledge.iron_oxide import get_info as get_iron_oxide_info
 from pigment_preparation.introduction import get_info as get_pigment_intro
 from pigment_preparation.pigment_types import get_info as get_pigment_types
 from knowledge.agriculture import get_info as get_agriculture_info
-
+from knowledge.business import answer_business
 
 def ask_ai(question):
     question = question.lower()
@@ -15,6 +15,39 @@ def ask_ai(question):
     # -----------------------------
     if "biochar" in question:
         return get_biochar_info()
+        # ------------------------------
+    # BUSINESS
+    # ------------------------------
+    if any(keyword in question for keyword in [
+        "business",
+        "business suite",
+        "entrepreneur",
+        "entrepreneurship",
+        "startup",
+        "marketplace",
+        "inventory",
+        "stock",
+        "sales",
+        "customer",
+        "invoice",
+        "receipt",
+        "employee",
+        "expense",
+        "profit",
+        "pricing",
+        "price",
+        "market",
+        "investment",
+        "investor",
+        "business plan",
+        "business planning",
+        "selling",
+        "selling products",
+        "agricultural business",
+        "mineral business",
+        "product business"
+    ]):
+        return answer_business(question)
           # AGRICULTURE
     if any(keyword in question for keyword in [
         "agriculture",
