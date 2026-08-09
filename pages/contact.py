@@ -7,14 +7,23 @@ def show_page():
     st.info("Pan Ideate Africa")
 
     st.write("""
-### Building Africa Through Science,
-Innovation & Practical Education.
+    ### 🌍 Pan Ideate Africa Ltd
 
-📧 Email:
-info@panideate.africa
+    **Africa's Knowledge Hub for Science, Innovation and Practical Education.**
 
-🌍 Website:
-Coming Soon
+    📧 **Email:**  
+    info@panideate.africa
 
-📍 Uganda
-""")
+    🌐 **Website:**  
+    www.panideateafrica.com
+
+    📱 **Phone:**  
+    +256 787 098 089
+
+    📍 **Location:**  
+    Uganda, East Africa
+
+    We welcome enquiries, partnerships, research collaboration,
+    educational opportunities, innovation projects and other
+    initiatives that support African development.
+    """)
