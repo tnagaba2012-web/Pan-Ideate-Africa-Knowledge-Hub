@@ -168,35 +168,28 @@ elif page == "❤️ Donations & Partnerships":
     donations.show_page()
 # ============================================
 
-elif page=="📚 Learning Centre":
+# ============================================================
+# LEARNING CENTRE
+# ============================================================
 
-    st.title("📚 Learning Centre")
+elif page == "📚 Learning Centre":
+    learning.show_page()
 
-    st.info("Learning Centre arrives in Build 7.3")
 
-# ============================================
+# ============================================================
+# INNOVATION
+# ============================================================
 
-elif page=="🚀 Innovation":
+elif page == "🚀 Innovation":
+    innovation.show_page()
 
-    st.title("🚀 Innovation")
 
-    st.info("Innovation Hub arrives in Build 7.3")
+# ============================================================
+# CONTACT
+# ============================================================
 
-# ============================================
-
-elif page=="📞 Contact":
-
-    st.title("📞 Contact")
-
-    st.write("""
-
-Pan Ideate Africa Ltd.
-
-Building Africa Through Science,
-Innovation & Practical Education.
-
-""")
-
+elif page == "📞 Contact":
+    contact.show_page()
 # ============================================
 # FOOTER
 # ============================================
