@@ -12,15 +12,14 @@ def show_page():
     # -----------------------------------------
 
     languages = {
-        "🇬🇧 English": "English",
-        "🇺🇬 Luganda": "Luganda",
-        "🇰🇪 Swahili": "Swahili",
-        "🇺🇬 Runyankore": "Runyankore",
-        "🇺🇬 Ateso": "Ateso",
-        "🇺🇬 Luo": "Luo",
-        "🇺🇬 Lugisu": "Lugisu",
-        "🇫🇷 French": "French",
-        "🇸🇦 Arabic": "Arabic",
+        "UG Runyankore": "Runyankore",
+        "UG Runyoro/Rutoro": "Runyoro/Rutoro",
+        "RW Kinyarwanda": "Kinyarwanda",
+        "UG Ateso": "Ateso",
+        "UG Luo": "Luo",
+        "UG Lugisu": "Lugisu",
+        "FR French": "French",
+        "SA Arabic": "Arabic",
     }
 
     selected_language = st.selectbox(
@@ -48,6 +47,8 @@ def show_page():
             "Luo": "Yier Uwol",
             "Lugisu": "Londa Olulimi Lwo",
             "French": "Choisissez votre langue",
+            "Kinyarwanda": "Hitamo Ururimi",
+            "Runyoro/Rutoro": "Londa Orurimi",
             "Arabic": "اختر لغتك",
         },
 
@@ -60,6 +61,8 @@ def show_page():
             "Luo": "Yier Uwol",
             "Lugisu": "Londa Olulimi Lwo",
             "French": "Bienvenue au Centre des Langues Africaines",
+            "Kinyarwanda": "Murakaza neza mu Kigo cy'Indimi Nyafurika",
+            "Runyoro/Rutoro": "Mwayanza omu Kicweka ky'Enimi za Africa",
             "Arabic": "مرحباً بكم في مركز اللغات الأفريقية",
         },
 
@@ -72,6 +75,8 @@ def show_page():
             "Luo": "Pur",
             "Lugisu": "Bulimi",
             "French": "Agriculture",
+            "Kinyarwanda": "Ubuhinzi",
+            "Runyoro/Rutoro": "Obulimi",
             "Arabic": "الزراعة",
         },
 
@@ -84,6 +89,8 @@ def show_page():
             "Luo": "Tijiri",
             "Lugisu": "Bubusi",
             "French": "Entreprise",
+            "Kinyarwanda": "Ubucuruzi",
+            "Runyoro/Rutoro": "Obusuubuzi",
             "Arabic": "الأعمال",
         },
 
@@ -96,6 +103,8 @@ def show_page():
             "Luo": "Kar kwanjo",
             "Lugisu": "Esika y'okusoma",
             "French": "Centre d'apprentissage",
+            "Kinyarwanda": "Ikigo Cyigisha",
+            "Runyoro/Rutoro": "Kicweka ky'Okwega",
             "Arabic": "مركز التعلم",
         },
     }
