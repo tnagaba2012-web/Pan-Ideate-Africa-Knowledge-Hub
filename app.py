@@ -38,13 +38,7 @@ h1,h2,h3{
     color:#0B6E4F;
 }
 
-div[data-testid="stSidebar"]{
-    background-color:#0B6E4F;
-}
 
-div[data-testid="stSidebar"] *{
-    color:white;
-}
 
 .project-card{
     background:white;
