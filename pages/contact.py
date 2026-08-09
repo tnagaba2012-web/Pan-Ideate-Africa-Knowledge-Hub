@@ -1,5 +1,5 @@
 import streamlit as st
-
+from utils.database import save_message
 
 def show_page():
 
@@ -165,20 +165,27 @@ def show_page():
             use_container_width=True
         )
 
-        if submitted:
+    if submitted:
 
-            if name and message:
+       if name and message:
 
-                st.success(
-                    "Thank you! Your message has been received. "
-                    "We will follow up using the contact details you provide."
-                )
+        save_message(
+            name=name,
+            organisation=organisation,
+            subject=subject,
+            message=message
+        )
 
-            else:
+        st.success(
+            "Thank you! Your message has been received. "
+            "We will follow up using the contact details you provide."
+        )
 
-                st.warning(
-                    "Please enter your name and message before submitting."
-                )
+    else:
+
+        st.warning(
+            "Please enter your name and message before submitting."
+        )
 
     st.markdown("---")
 
