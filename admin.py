@@ -52,14 +52,36 @@ def show_admin():
 
     st.divider()
 
-    # CONTACT INBOX
-    st.header("📬 Contact Inbox")
+    
+        # CONTACT INBOX
+    st.header("📨 Contact Inbox")
 
-    st.info(
-        "Messages submitted through the Contact page will appear here."
-    )
+    connection = get_connection()
+    cursor = connection.cursor()
 
-    st.divider()
+    cursor.execute("""
+        SELECT id, name, organisation, subject, message
+        FROM messages
+        ORDER BY id DESC
+    """)
+
+    messages = cursor.fetchall()
+
+    connection.close()
+
+    if messages:
+        st.success(f"{len(messages)} contact message(s) received.")
+
+        for msg in messages:
+            st.markdown(f"### 📨 {msg['subject']}")
+            st.write(f"**Name:** {msg['name']}")
+            st.write(f"**Organisation:** {msg['organisation'] or 'Not provided'}")
+            st.write(f"**Message:** {msg['message']}")
+            st.divider()
+    else:
+        st.info("No contact messages have been received yet.")
+
+        st.divider()
 
     # QUICK ADMIN SECTIONS
     st.header("⚙️ Administration")
