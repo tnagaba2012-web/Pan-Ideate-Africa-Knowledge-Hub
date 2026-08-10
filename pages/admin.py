@@ -36,21 +36,7 @@ def show_admin():
 
     st.divider()
 
-    # ADMIN DASHBOARD
-    st.header("📊 Administration Dashboard")
-
-    col1, col2, col3 = st.columns(3)
-
-    with col1:
-        st.metric("📨 Messages", "0")
-
-    with col2:
-        st.metric("🤝 Partnerships", "0")
-
-    with col3:
-        st.metric("💡 Innovation Ideas", "0")
-
-    st.divider()
+   
 
     
         # CONTACT INBOX
@@ -92,6 +78,7 @@ def show_admin():
             "Dashboard",
             "Contact Messages",
             "Partnership Requests",
+            "Donation Requests",
             "Innovation Ideas",
             "Learning Centre",
             "Knowledge Hub",
@@ -244,7 +231,7 @@ def show_admin():
     # DONATIONS
     # ==========================================================
 
-    elif admin_option == "Donations":
+    elif admin_option == "Donation Requests":
 
         st.subheader("💝 Donation Requests")
 

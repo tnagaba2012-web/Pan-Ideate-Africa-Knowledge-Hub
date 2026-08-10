@@ -1,4 +1,5 @@
 import streamlit as st
+from utils.database import save_donation, save_partnership
 
 
 def show_page():
@@ -136,6 +137,15 @@ def show_page():
                     "Please provide your name and phone number or email."
                 )
             else:
+                save_donation(
+                    name=donor_name,
+                    organisation=organisation,
+                    contribution_type=contribution_type,
+                    amount=amount,
+                    contact=donor_contact,
+                    message=donor_message
+                )
+
                 st.success(
                     "Thank you for your interest in supporting Pan Ideate Africa! "
                     "Your support request has been recorded for follow-up."
@@ -219,6 +229,15 @@ def show_page():
                     "Please complete all required partnership fields."
                 )
             else:
+                save_partnership(
+                    name=partner_name,
+                    
+                    organisation=partner_organisation,
+                    contact=partner_contact,
+                     partnership_type=selected_partnership,
+                    idea=partnership_message
+                )
+
                 st.success(
                     "Thank you! Your partnership enquiry has been received."
                 )
