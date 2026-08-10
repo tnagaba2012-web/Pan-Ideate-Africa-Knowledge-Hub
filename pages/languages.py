@@ -13,6 +13,7 @@ def show_page():
 
     languages = {
         "UG Runyankore": "Runyankore",
+        "UG Luganda": "Luganda",
         "UG Runyoro/Rutoro": "Runyoro/Rutoro",
         "RW Kinyarwanda": "Kinyarwanda",
         "UG Ateso": "Ateso",

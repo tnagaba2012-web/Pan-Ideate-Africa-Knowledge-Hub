@@ -12,7 +12,7 @@ from pages import languages
 from pages import donations
 from pages import iron_oxide
 from pigment_preparation.main import show_pigment_preparation
-from admin import show_admin
+from pages.admin import show_admin
 # ============================================
 # PAGE CONFIGURATION
 # ============================================
