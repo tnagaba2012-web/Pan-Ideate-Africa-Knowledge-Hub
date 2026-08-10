@@ -1,10 +1,8 @@
 import streamlit as st
-
 from utils.database import save_donation, save_partnership
 
 
 def show_page():
-
     st.title("❤️ Donations & Partnerships Centre")
 
     st.success(
@@ -15,7 +13,7 @@ def show_page():
         """
         Pan Ideate Africa is building a practical African knowledge platform
         where young people, schools, researchers, entrepreneurs and innovators
-        can Learn → Practice → Produce → Earn → Innovate.
+        can learn, practice, produce, earn and innovate.
 
         Your support can help us expand access to practical science, technology,
         agriculture, minerals, artificial intelligence, business development
@@ -77,114 +75,30 @@ def show_page():
     st.divider()
 
     # ============================================================
-    # WAYS TO SUPPORT
-    # ============================================================
-
-    st.header("💝 Ways You Can Support Pan Ideate Africa")
-
-    st.write(
-        """
-        There are several ways to support the growth of Pan Ideate Africa.
-        Official payment details will be published here as each payment
-        channel becomes operational.
-        """
-    )
-
-    # ------------------------------------------------------------
-    # MOBILE MONEY
-    # ------------------------------------------------------------
-
-    with st.expander("📱 Mobile Money", expanded=True):
-
-        st.subheader("MTN Mobile Money")
-
-        st.info(
-            "Official MTN Mobile Money payment details will be published "
-            "here when the Pan Ideate Africa payment channel is ready."
-        )
-
-        st.subheader("Airtel Money")
-
-        st.info(
-            "Official Airtel Money payment details will be published "
-            "here when the Pan Ideate Africa payment channel is ready."
-        )
-
-    # ------------------------------------------------------------
-    # BANK
-    # ------------------------------------------------------------
-
-    with st.expander("🏦 Bank Transfer"):
-
-        st.write("**Bank:** Official bank details coming soon")
-        st.write("**Account Name:** Pan Ideate Africa")
-        st.write("**Account Number:** To be published")
-        st.write("**Branch:** To be published")
-
-        st.info(
-            "Please use only official payment details published by "
-            "Pan Ideate Africa."
-        )
-
-    # ------------------------------------------------------------
-    # DIGITAL / ONLINE
-    # ------------------------------------------------------------
-
-    with st.expander("💳 Online & Digital Payments"):
-
-        st.info(
-            "Online payment options will be connected here as official "
-            "payment gateways become available."
-        )
-
-    # ------------------------------------------------------------
-    # INTERNATIONAL SUPPORT
-    # ------------------------------------------------------------
-
-    with st.expander("🌍 International Support"):
-
-        st.write(
-            """
-            Supporters outside Uganda will be able to use approved
-            international payment channels when they are connected.
-            """
-        )
-
-        st.info(
-            "International payment details coming soon."
-        )
-
-    st.divider()
-
-    # ============================================================
-    # DONATION / SUPPORT FORM
+    # DONATIONS
     # ============================================================
 
     st.header("💝 Support Pan Ideate Africa")
 
     st.write(
         """
-        You can also register your interest in supporting Pan Ideate Africa.
-        Your support may be financial or may take the form of equipment,
-        learning materials, technology, training, research or other resources.
+        Individuals, organisations, schools and institutions can express
+        their interest in supporting Pan Ideate Africa.
+
+        Your contribution may support learning materials, practical
+        demonstrations, research, technology, youth training and innovation.
         """
     )
 
-    st.subheader("❤️ Support / Donation Form")
+    st.subheader("💰 Donation / Support Interest Form")
 
     with st.form("donation_form"):
-
         donor_name = st.text_input(
             "Your name *"
         )
 
         organisation = st.text_input(
             "Organisation / Institution (optional)"
-        )
-
-        country = st.text_input(
-            "Country",
-            value="Uganda"
         )
 
         contribution_type = st.selectbox(
@@ -196,25 +110,12 @@ def show_page():
                 "Computers / technology",
                 "Training support",
                 "Research support",
-                "Agricultural support",
-                "Minerals & chemistry equipment",
                 "Other"
             ]
         )
 
         amount = st.text_input(
             "Estimated contribution amount (UGX, optional)"
-        )
-
-        payment_method = st.selectbox(
-            "Preferred payment method",
-            [
-                "Mobile Money",
-                "Bank Transfer",
-                "Online / Digital Payment",
-                "International Payment",
-                "Not decided yet"
-            ]
         )
 
         donor_contact = st.text_input(
@@ -225,11 +126,6 @@ def show_page():
             "Additional message (optional)"
         )
 
-        anonymous_choice = st.checkbox(
-            "❤️ I would like my support to be treated as anonymous "
-            "for public recognition."
-        )
-
         donation_submitted = st.form_submit_button(
             "❤️ Submit Support Interest"
         )
@@ -237,56 +133,28 @@ def show_page():
         if donation_submitted:
 
             if not donor_name.strip() or not donor_contact.strip():
-
                 st.error(
                     "Please provide your name and phone number or email."
                 )
-
             else:
-
-                # The current database stores the existing donation fields.
-                # We preserve that database structure while recording the
-                # donor's preference in the message field.
-
-                anonymous_note = ""
-
-                if anonymous_choice:
-                    anonymous_note = (
-                        "\n\n[Donor requested anonymous public recognition.]"
-                    )
-
-                full_message = (
-                    f"Country: {country}\n"
-                    f"Preferred payment method: {payment_method}\n"
-                    f"Donor message: {donor_message}"
-                    f"{anonymous_note}"
-                )
-
                 save_donation(
                     name=donor_name,
                     organisation=organisation,
                     contribution_type=contribution_type,
                     amount=amount,
                     contact=donor_contact,
-                    message=full_message
+                    message=donor_message
                 )
 
                 st.success(
-                    "🎉 Thank you! Your support interest has been "
-                    "successfully recorded."
+                    "Thank you for your interest in supporting Pan Ideate Africa! "
+                    "Your support request has been recorded for follow-up."
                 )
 
-                if anonymous_choice:
-                    st.info(
-                        "❤️ Your request for anonymous public recognition "
-                        "has been noted."
-                    )
-
-                st.balloons()
-
                 st.info(
-                    "Our team can follow up using the contact information "
-                    "you provided."
+                    "Contribution processing and payment options can be "
+                    "connected here once the official Pan Ideate Africa "
+                    "payment channels are ready."
                 )
 
     st.divider()
@@ -357,24 +225,21 @@ def show_page():
                 or not partner_contact.strip()
                 or not partnership_message.strip()
             ):
-
                 st.error(
                     "Please complete all required partnership fields."
                 )
-
             else:
-
                 save_partnership(
                     name=partner_name,
+                    
                     organisation=partner_organisation,
                     contact=partner_contact,
-                    partnership_type=selected_partnership,
+                     partnership_type=selected_partnership,
                     idea=partnership_message
                 )
 
                 st.success(
-                    "🎉 Thank you! Your partnership enquiry has "
-                    "been successfully recorded."
+                    "Thank you! Your partnership enquiry has been received."
                 )
 
                 st.write(
@@ -382,8 +247,8 @@ def show_page():
                 )
 
                 st.info(
-                    "The Pan Ideate Africa team can follow up using "
-                    "the contact information you provided."
+                    "The Pan Ideate Africa team can follow up using the "
+                    "contact information you provided."
                 )
 
     st.divider()
@@ -398,14 +263,10 @@ def show_page():
         """
         We welcome individuals and organisations that believe in practical
         African education, innovation and youth empowerment.
-        """
-    )
 
-    st.info(
-        """
-        Official payment channels will always be published through
-        Pan Ideate Africa's official platform. Please verify payment
-        details before sending money.
+        For now, please use the forms above to express your interest.
+        Official payment channels and additional contact details can be
+        connected here when they are ready.
         """
     )
 
