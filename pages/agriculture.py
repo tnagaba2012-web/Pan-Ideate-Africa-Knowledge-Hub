@@ -800,22 +800,32 @@ def show_page():
         st.write("8️⃣ Train youth")
 
     # =========================================================
-    # FINAL AGRICULTURE MODEL
-    # =========================================================
+    # ============================================================
+    # ============================================================
+    # 
+    # ============================================================
 
-    st.divider()
+    
+    
+        # FINAL AGRICULTURE MODEL
+        # =========================================================
 
-    st.header("🇺🇬 Pan Ideate Africa Agricultural Model")
+        st.divider()
 
-    st.markdown("""
-    ### Learn → Practice → Produce → Earn → Innovate
+        st.header("🇺🇬 Pan Ideate Africa Agricultural Model")
 
-    We will develop each agricultural project from its **science and
-    chemistry**, through **practical demonstrations and research**, into
-    **validated products and viable Ugandan/East African businesses**.
-    """)
+        st.markdown("""
+        ### Learn → Practice → Produce → Earn → Innovate
 
-    st.info(
-        "🌍 Pan Ideate Africa is building agricultural knowledge around "
-        "local resources, practical science, innovation and youth entrepreneurship."
-    )
+        We will develop each agricultural project from its **science and
+        chemistry**, through **practical demonstrations and research**, into
+        **validated products and viable Ugandan/East African businesses**.
+        """)
+
+        st.info(
+            "🌍 Pan Ideate Africa is building agricultural knowledge around "
+            "local resources, practical science, innovation and youth entrepreneurship."
+        )
+        
+            # ============================================================
+      
