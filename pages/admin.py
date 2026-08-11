@@ -126,8 +126,9 @@ def show_admin():
             st.metric("💝 Donations", donation_count)
 
     # ==========================================================
+    # ============================================================
     # CONTACT MESSAGES
-    # ==========================================================
+    # ============================================================
 
     elif admin_option == "Contact Messages":
 
@@ -135,7 +136,11 @@ def show_admin():
 
         connection = get_connection()
 
-        rows = connection.execute("""
+        # --------------------------------------------------------
+        # GET NEW MESSAGES
+        # --------------------------------------------------------
+
+        new_rows = connection.execute("""
             SELECT
                 id,
                 name,
@@ -145,39 +150,227 @@ def show_admin():
                 status,
                 created_at
             FROM messages
+            WHERE status = 'New'
+            ORDER BY id DESC
+        """).fetchall()
+
+        # --------------------------------------------------------
+        # GET READ / OLDER MESSAGES
+        # --------------------------------------------------------
+
+        old_rows = connection.execute("""
+            SELECT
+                id,
+                name,
+                organisation,
+                subject,
+                message,
+                status,
+                created_at
+            FROM messages
+            WHERE status != 'New'
             ORDER BY id DESC
         """).fetchall()
 
         connection.close()
 
-        if rows:
-            st.success(f"{len(rows)} message(s) found.")
+        # ========================================================
+        # NEW MESSAGES
+        # ========================================================
 
-            for row in rows:
+        st.markdown("### 🔴 New Messages")
+
+        if new_rows:
+
+            st.success(
+                f"{len(new_rows)} new message(s) waiting for attention."
+            )
+
+            for row in new_rows:
 
                 with st.expander(
-                    f"📨 {row['subject'] or 'No subject'} — {row['name']}"
+                    f"🔴 {row['subject'] or 'No subject'} — {row['name']}"
                 ):
 
                     st.write(f"**Name:** {row['name']}")
+
                     st.write(
                         f"**Organisation:** "
                         f"{row['organisation'] or 'Not provided'}"
                     )
+
                     st.write(
                         f"**Subject:** "
                         f"{row['subject'] or 'No subject'}"
                     )
+
                     st.write(f"**Message:** {row['message']}")
-                    st.write(f"**Status:** {row['status']}")
-                    st.write(f"**Received:** {row['created_at']}")
+
+                    st.write(f"**Status:** 🔴 {row['status']}")
+
+                    st.write(
+                        f"**Received:** {row['created_at']}"
+                    )
+
+                    if st.button(
+                        "✅ Mark as Read",
+                        key=f"read_message_{row['id']}"
+                    ):
+
+                        connection = get_connection()
+
+                        connection.execute(
+                            """
+                            UPDATE messages
+                            SET status = 'Read'
+                            WHERE id = ?
+                            """,
+                            (row['id'],)
+                        )
+
+                        connection.commit()
+                        connection.close()
+
+                        st.success("Message marked as read.")
+
+                        st.rerun()
 
         else:
-            st.info("No contact messages have been received yet.")
+
+            st.info("✅ No new messages at this time.")
+
+        # ========================================================
+        # OLDER / READ MESSAGES
+        # ========================================================
+
+        st.divider()
+
+        st.markdown("### 📖 Older / Read Messages")
+
+        if old_rows:
+
+            st.write(
+                f"{len(old_rows)} older/read message(s) available."
+            )
+
+            for row in old_rows:
+
+                with st.expander(
+                    f"📖 {row['subject'] or 'No subject'} — {row['name']}"
+                ):
+
+                    st.write(f"**Name:** {row['name']}")
+
+                    st.write(
+                        f"**Organisation:** "
+                        f"{row['organisation'] or 'Not provided'}"
+                    )
+
+                    st.write(
+                        f"**Subject:** "
+                        f"{row['subject'] or 'No subject'}"
+                    )
+
+                    st.write(f"**Message:** {row['message']}")
+
+                    st.write(f"**Status:** 📖 {row['status']}")
+
+                    st.write(
+                        f"**Received:** {row['created_at']}"
+                    )
+
+        else:
+
+            st.info("There are no older/read messages yet.")
+        # ========================================================
+        # DELETE MESSAGES
+        # ========================================================
+
+        st.divider()
+
+        st.markdown("### 🗑️ Message Management")
+
+        connection = get_connection()
+
+        all_messages = connection.execute("""
+            SELECT
+                id,
+                name,
+                subject,
+                status,
+                created_at
+            FROM messages
+            ORDER BY id DESC
+        """).fetchall()
+
+        connection.close()
+
+        if all_messages:
+
+            message_options = {
+                f"#{row['id']} — {row['subject'] or 'No subject'} — "
+                f"{row['name']} ({row['status']})": row["id"]
+                for row in all_messages
+            }
+
+            selected_message = st.selectbox(
+                "Choose a message to delete",
+                list(message_options.keys()),
+                key="delete_message_selector"
+            )
+
+            selected_id = message_options[selected_message]
+
+            st.warning(
+                "⚠️ Deleting a message is permanent. "
+                "Please confirm before continuing."
+            )
+
+            confirm_delete = st.checkbox(
+                "I understand that this message will be permanently deleted.",
+                key=f"confirm_delete_{selected_id}"
+            )
+
+            if st.button(
+                "🗑️ Delete Selected Message",
+                key=f"delete_message_{selected_id}"
+            ):
+
+                if not confirm_delete:
+
+                    st.error(
+                        "Please confirm the deletion first."
+                    )
+
+                else:
+
+                    connection = get_connection()
+
+                    connection.execute(
+                        """
+                        DELETE FROM messages
+                        WHERE id = ?
+                        """,
+                        (selected_id,)
+                    )
+
+                    connection.commit()
+                    connection.close()
+
+                    st.success(
+                        "✅ Message deleted successfully."
+                    )
+
+                    st.rerun()
+
+        else:
+
+            st.info("There are no messages available to delete.")
 
     # ==========================================================
+   # ============================================================
     # PARTNERSHIP REQUESTS
-    # ==========================================================
+    # ============================================================
 
     elif admin_option == "Partnership Requests":
 
@@ -185,7 +378,13 @@ def show_admin():
 
         connection = get_connection()
 
-        rows = connection.execute("""
+        # --------------------------------------------------------
+        # NEW PARTNERSHIP REQUESTS
+        # --------------------------------------------------------
+
+        st.header("🔴 New Partnership Requests")
+
+        new_rows = connection.execute("""
             SELECT
                 id,
                 name,
@@ -196,36 +395,249 @@ def show_admin():
                 status,
                 created_at
             FROM partnerships
+            WHERE status = 'New'
             ORDER BY id DESC
         """).fetchall()
 
-        connection.close()
+        if new_rows:
 
-        if rows:
-            st.success(f"{len(rows)} partnership request(s) found.")
+            st.success(
+                f"{len(new_rows)} new partnership request(s) found."
+            )
 
-            for row in rows:
+            for row in new_rows:
 
                 with st.expander(
-                    f"🤝 {row['partnership_type']} — {row['name']}"
+                    f"🤝 {row['partnership_type'] or 'Partnership Request'} "
+                    f"— {row['name']}"
                 ):
 
                     st.write(f"**Name:** {row['name']}")
+
                     st.write(
                         f"**Organisation:** "
                         f"{row['organisation'] or 'Not provided'}"
                     )
-                    st.write(f"**Contact:** {row['contact']}")
+
+                    st.write(
+                        f"**Contact:** "
+                        f"{row['contact'] or 'Not provided'}"
+                    )
+
                     st.write(
                         f"**Partnership Type:** "
-                        f"{row['partnership_type']}"
+                        f"{row['partnership_type'] or 'Not specified'}"
                     )
-                    st.write(f"**Idea:** {row['idea']}")
-                    st.write(f"**Status:** {row['status']}")
-                    st.write(f"**Received:** {row['created_at']}")
+
+                    st.write("**Partnership Idea:**")
+
+                    st.write(
+                        row['idea'] or "No partnership idea provided."
+                    )
+
+                    st.write(
+                        f"**Received:** {row['created_at']}"
+                    )
+
+                    st.write(
+                        f"**Status:** 🔴 {row['status']}"
+                    )
+
+                    if st.button(
+                        "✅ Mark as Reviewed",
+                        key=f"review_partnership_{row['id']}"
+                    ):
+
+                        update_connection = get_connection()
+
+                        update_connection.execute(
+                            """
+                            UPDATE partnerships
+                            SET status = 'Reviewed'
+                            WHERE id = ?
+                            """,
+                            (row["id"],)
+                        )
+
+                        update_connection.commit()
+                        update_connection.close()
+
+                        st.success(
+                            "Partnership request marked as reviewed."
+                        )
+
+                        st.rerun()
 
         else:
-            st.info("No partnership requests have been received yet.")
+
+            st.info(
+                "No new partnership requests at this time."
+            )
+
+        st.divider()
+
+        # --------------------------------------------------------
+        # OLDER / REVIEWED PARTNERSHIP REQUESTS
+        # --------------------------------------------------------
+
+        st.header("📖 Older / Reviewed Partnership Requests")
+
+        reviewed_rows = connection.execute("""
+            SELECT
+                id,
+                name,
+                organisation,
+                contact,
+                partnership_type,
+                idea,
+                status,
+                created_at
+            FROM partnerships
+            WHERE status != 'New'
+            ORDER BY id DESC
+        """).fetchall()
+
+        if reviewed_rows:
+
+            st.write(
+                f"{len(reviewed_rows)} reviewed partnership request(s) available."
+            )
+
+            for row in reviewed_rows:
+
+                with st.expander(
+                    f"📖 {row['partnership_type'] or 'Partnership Request'} "
+                    f"— {row['name']}"
+                ):
+
+                    st.write(f"**Name:** {row['name']}")
+
+                    st.write(
+                        f"**Organisation:** "
+                        f"{row['organisation'] or 'Not provided'}"
+                    )
+
+                    st.write(
+                        f"**Contact:** "
+                        f"{row['contact'] or 'Not provided'}"
+                    )
+
+                    st.write(
+                        f"**Partnership Type:** "
+                        f"{row['partnership_type'] or 'Not specified'}"
+                    )
+
+                    st.write("**Partnership Idea:**")
+
+                    st.write(
+                        row['idea'] or "No partnership idea provided."
+                    )
+
+                    st.write(
+                        f"**Received:** {row['created_at']}"
+                    )
+
+                    st.write(
+                        f"**Status:** 🟢 {row['status']}"
+                    )
+
+        else:
+
+            st.info(
+                "There are no older/reviewed partnership requests yet."
+            )
+
+        connection.close()
+
+        st.divider()
+
+        # --------------------------------------------------------
+        # PARTNERSHIP REQUEST MANAGEMENT
+        # --------------------------------------------------------
+
+        st.header("🗑️ Partnership Request Management")
+
+        management_connection = get_connection()
+
+        management_rows = management_connection.execute("""
+            SELECT
+                id,
+                name,
+                organisation,
+                partnership_type,
+                status,
+                created_at
+            FROM partnerships
+            ORDER BY id DESC
+        """).fetchall()
+
+        management_connection.close()
+
+        if management_rows:
+
+            partnership_options = [
+                f"{row['id']} — "
+                f"{row['name']} — "
+                f"{row['partnership_type'] or 'Partnership'} — "
+                f"{row['status']}"
+                for row in management_rows
+            ]
+
+            selected_partnership = st.selectbox(
+                "Select a partnership request to manage:",
+                partnership_options
+            )
+
+            selected_id = int(
+                selected_partnership.split(" — ")[0]
+            )
+
+            st.warning(
+                "⚠️ Deleting a partnership request is permanent."
+            )
+
+            confirm_delete = st.checkbox(
+                "I understand that this request will be permanently deleted.",
+                key="confirm_delete_partnership"
+            )
+
+            if st.button(
+                "🗑️ Delete Selected Partnership Request",
+                key="delete_partnership"
+            ):
+
+                if not confirm_delete:
+
+                    st.error(
+                        "Please confirm the deletion first."
+                    )
+
+                else:
+
+                    delete_connection = get_connection()
+
+                    delete_connection.execute(
+                        """
+                        DELETE FROM partnerships
+                        WHERE id = ?
+                        """,
+                        (selected_id,)
+                    )
+
+                    delete_connection.commit()
+                    delete_connection.close()
+
+                    st.success(
+                        "Partnership request deleted successfully."
+                    )
+
+                    st.rerun()
+
+        else:
+
+            st.info(
+                "There are no partnership requests available to manage."
+            )
 
     # ==========================================================
     # DONATIONS
