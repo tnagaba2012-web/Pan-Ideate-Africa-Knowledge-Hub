@@ -1,7 +1,7 @@
 import streamlit as st
 from utils.database import save_message, get_connection
 def show_page():
-
+    st.error("CONTACT.PY TEST — THIS IS THE CURRENT FILE")
     st.title("📞 Contact Pan Ideate Africa")
 
     st.success(
