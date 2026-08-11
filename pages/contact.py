@@ -1,7 +1,7 @@
 import streamlit as st
 from utils.database import save_message, get_connection
 def show_page():
-    st.error("CONTACT.PY TEST — THIS IS THE CURRENT FILE")
+    
     st.title("📞 Contact Pan Ideate Africa")
 
     st.success(
@@ -138,9 +138,7 @@ def show_page():
 
     st.markdown("---")
 
-    # ==========================================================
-    # MESSAGE
-    # ==========================================================
+    #
 
         # ============================================================
     # MESSAGE
@@ -180,17 +178,9 @@ def show_page():
                 message=message
             )
 
-            connection = get_connection()
+           
 
-            debug_count = connection.execute(
-                "SELECT COUNT(*) AS count FROM messages"
-            ).fetchone()["count"]
-
-            connection.close()
-
-            st.error(
-              f"DEBUG TEST — Messages after submission: {debug_count}"
-         )
+            
 
             st.success(
                 "Thank you! Your message has been received by "
