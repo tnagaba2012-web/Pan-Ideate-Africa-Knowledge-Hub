@@ -188,10 +188,9 @@ def show_page():
 
             connection.close()
 
-            st.write(
-                "DEBUG — Messages after submission:",
-                debug_count
-            )
+            st.error(
+              f"DEBUG TEST — Messages after submission: {debug_count}"
+         )
 
             st.success(
                 "Thank you! Your message has been received by "
