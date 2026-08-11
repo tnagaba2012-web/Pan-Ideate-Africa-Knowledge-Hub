@@ -1,5 +1,6 @@
 import streamlit as st
 import os
+from pages.business_suite_modules import subscriptions
 from utils.database import get_connection
 
 def show_admin():
@@ -76,6 +77,7 @@ def show_admin():
         "Choose an administration area",
         [
             "Dashboard",
+            "💳 Membership & Subscriptions",
             "Contact Messages",
             "Partnership Requests",
             "Donation Requests",
@@ -124,6 +126,13 @@ def show_admin():
 
         with col3:
             st.metric("💝 Donations", donation_count)
+            
+        #SUBSCRIPTION AND MEMBERSHIP MANAGEMENT    
+            
+    elif admin_option == "💳 Membership & Subscriptions":
+        subscriptions.show()        
+            
+            
 
     # ==========================================================
     # ============================================================
@@ -140,11 +149,7 @@ def show_admin():
             # GET NEW MESSAGES
         # ==========================================
 
-        debug_count = connection.execute(
-            "SELECT COUNT(*) AS count FROM messages"
-        ).fetchone()["count"]
-
-        st.write("DEBUG — Total messages in database:", debug_count)
+       
 
         new_rows = connection.execute("""
             SELECT

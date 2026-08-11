@@ -11,8 +11,10 @@ from pages import contact
 from pages import languages
 from pages import donations
 from pages import iron_oxide
+from pages.business_suite_modules import subscriptions
 from pigment_preparation.main import show_pigment_preparation
 from pages.admin import show_admin
+
 # ============================================
 # PAGE CONFIGURATION
 # ============================================
@@ -77,10 +79,11 @@ page = st.sidebar.radio(
         "🌍 Choose a Language",  
         "🧪 Minerals & Chemistry",
         "📖 Uganda Minerals Handbook",
-        "🗺️ Project Roadmap",
+       
         "🌱 Agriculture",
         "❤️ Donations & Partnerships",
         "💼 Business Suite",
+        "💳 Membership & Subscriptions",
         "🟥 Iron Oxide Pigments Handbook",
         "🧪 Pigment Preparation Laboratory",
         "🤖 Artificial Intelligence",
@@ -160,6 +163,8 @@ elif page == "🌱 Agriculture":
 
 elif page == "💼 Business Suite":
    business_suite.show_business_suite()
+elif page == "💳 Membership & Subscriptions":
+    subscriptions.show()
 elif page == "🤖 Artificial Intelligence":
     artificial_intelligence.show_page()
 elif page == "🌍 Choose a Language":
