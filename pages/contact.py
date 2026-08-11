@@ -142,7 +142,11 @@ def show_page():
     # MESSAGE
     # ==========================================================
 
-    st.header("✉️ Send Us a Message")
+        # ============================================================
+    # MESSAGE
+    # ============================================================
+
+    st.header("📨 Send Us a Message")
 
     with st.form("contact_form"):
 
@@ -164,18 +168,44 @@ def show_page():
             use_container_width=True
         )
 
-        connection = get_connection()
 
-    debug_count = connection.execute(
-        "SELECT COUNT(*) AS count FROM messages"
-    ).fetchone()["count"]
+    if submitted:
 
-    connection.close()
+        if name and message:
 
-    st.write("DEBUG — Messages after submission:", debug_count)
+            save_message(
+                name=name,
+                organisation=organisation,
+                subject=subject,
+                message=message
+            )
+
+            connection = get_connection()
+
+            debug_count = connection.execute(
+                "SELECT COUNT(*) AS count FROM messages"
+            ).fetchone()["count"]
+
+            connection.close()
+
+            st.write(
+                "DEBUG — Messages after submission:",
+                debug_count
+            )
+
+            st.success(
+                "Thank you! Your message has been received by "
+                "the Pan Ideate Africa Knowledge Hub."
+            )
+
+        else:
+
+            st.warning(
+                "Please enter your name and message before submitting."
+            )
+
 
     st.markdown("---")
-
     # ==========================================================
     # OUR MISSION
     # ==========================================================
