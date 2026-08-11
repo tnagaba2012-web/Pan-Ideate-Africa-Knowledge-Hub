@@ -137,8 +137,14 @@ def show_admin():
         connection = get_connection()
 
         # --------------------------------------------------------
-        # GET NEW MESSAGES
-        # --------------------------------------------------------
+            # GET NEW MESSAGES
+        # ==========================================
+
+        debug_count = connection.execute(
+            "SELECT COUNT(*) AS count FROM messages"
+        ).fetchone()["count"]
+
+        st.write("DEBUG — Total messages in database:", debug_count)
 
         new_rows = connection.execute("""
             SELECT
@@ -642,14 +648,19 @@ def show_admin():
     # ==========================================================
     # DONATIONS
     # ==========================================================
-
     elif admin_option == "Donation Requests":
 
-        st.subheader("💝 Donation Requests")
+        st.subheader("❤️ Donation Requests")
 
         connection = get_connection()
 
-        rows = connection.execute("""
+        # ==========================================================
+        # NEW DONATION REQUESTS
+        # ==========================================================
+
+        st.header("🔴 New Donation Requests")
+
+        new_rows = connection.execute("""
             SELECT
                 id,
                 name,
@@ -661,37 +672,210 @@ def show_admin():
                 status,
                 created_at
             FROM donations
+            WHERE status = 'New'
             ORDER BY id DESC
         """).fetchall()
 
-        connection.close()
+        if new_rows:
 
-        if rows:
-            st.success(f"{len(rows)} donation request(s) found.")
+            st.success(f"{len(new_rows)} new donation request(s) found.")
 
-            for row in rows:
+            for row in new_rows:
 
                 with st.expander(
-                    f"💝 {row['name']} — {row['contribution_type']}"
+                    f"❤️ {row['name']} — {row['contribution_type']}"
                 ):
 
                     st.write(f"**Name:** {row['name']}")
+
                     st.write(
                         f"**Organisation:** "
                         f"{row['organisation'] or 'Not provided'}"
                     )
+
                     st.write(
                         f"**Contribution:** "
-                        f"{row['contribution_type']}"
+                        f"{row['contribution_type'] or 'Not specified'}"
                     )
+
                     st.write(f"**Amount:** {row['amount']}")
-                    st.write(f"**Contact:** {row['contact']}")
-                    st.write(f"**Message:** {row['message']}")
-                    st.write(f"**Status:** {row['status']}")
+
+                    st.write(
+                        f"**Contact:** "
+                        f"{row['contact'] or 'Not provided'}"
+                    )
+
+                    st.write(
+                        f"**Message:** "
+                        f"{row['message'] or 'No message provided'}"
+                    )
+
                     st.write(f"**Received:** {row['created_at']}")
 
+                    st.write("**Status:** 🔴 New")
+
+                    if st.button(
+                        "✅ Mark as Reviewed",
+                        key=f"review_donation_{row['id']}"
+                    ):
+
+                        update_connection = get_connection()
+
+                        update_connection.execute(
+                            """
+                            UPDATE donations
+                            SET status = 'Reviewed'
+                            WHERE id = ?
+                            """,
+                            (row["id"],)
+                        )
+
+                        update_connection.commit()
+                        update_connection.close()
+
+                        st.success("Donation request marked as reviewed.")
+                        st.rerun()
+
         else:
-            st.info("No donation requests have been received yet.")
+
+            st.info("No new donation requests at this time.")
+
+        # ==========================================================
+        # OLDER / REVIEWED DONATIONS
+        # ==========================================================
+
+        st.divider()
+
+        st.header("📖 Older / Reviewed Donations")
+
+        reviewed_rows = connection.execute("""
+            SELECT
+                id,
+                name,
+                organisation,
+                contribution_type,
+                amount,
+                contact,
+                message,
+                status,
+                created_at
+            FROM donations
+            WHERE status != 'New'
+            ORDER BY id DESC
+        """).fetchall()
+
+        if reviewed_rows:
+
+            st.write(
+                f"{len(reviewed_rows)} reviewed donation(s) available."
+            )
+
+            for row in reviewed_rows:
+
+                with st.expander(
+                    f"📖 {row['name']} — {row['contribution_type']}"
+                ):
+
+                    st.write(f"**Name:** {row['name']}")
+
+                    st.write(
+                        f"**Organisation:** "
+                        f"{row['organisation'] or 'Not provided'}"
+                    )
+
+                    st.write(
+                        f"**Contribution:** "
+                        f"{row['contribution_type'] or 'Not specified'}"
+                    )
+
+                    st.write(f"**Amount:** {row['amount']}")
+
+                    st.write(
+                        f"**Contact:** "
+                        f"{row['contact'] or 'Not provided'}"
+                    )
+
+                    st.write(
+                        f"**Message:** "
+                        f"{row['message'] or 'No message provided'}"
+                    )
+
+                    st.write(f"**Received:** {row['created_at']}")
+
+                    st.write(f"**Status:** 🟢 {row['status']}")
+
+        else:
+
+            st.info("There are no older/reviewed donations yet.")
+
+        # ==========================================================
+        # DONATION MANAGEMENT
+        # ==========================================================
+
+        st.divider()
+
+        st.header("🗑️ Donation Management")
+
+        if new_rows or reviewed_rows:
+
+            all_rows = new_rows + reviewed_rows
+
+            donation_options = {
+                f"{row['id']} — {row['name']} — "
+                f"{row['contribution_type']} — {row['status']}":
+                row["id"]
+                for row in all_rows
+            }
+
+            selected_donation = st.selectbox(
+                "Select a donation request to manage:",
+                list(donation_options.keys()),
+                key="selected_donation"
+            )
+
+            selected_id = donation_options[selected_donation]
+
+            st.warning(
+                "Deleting a donation request is permanent."
+            )
+
+            confirm_delete = st.checkbox(
+                "I understand that this donation request "
+                "will be permanently deleted.",
+                key="confirm_delete_donation"
+            )
+
+            if st.button(
+                "🗑️ Delete Selected Donation Request",
+                disabled=not confirm_delete,
+                key="delete_donation"
+            ):
+
+                delete_connection = get_connection()
+
+                delete_connection.execute(
+                    """
+                    DELETE FROM donations
+                    WHERE id = ?
+                    """,
+                    (selected_id,)
+                )
+
+                delete_connection.commit()
+                delete_connection.close()
+
+                st.success(
+                    "Donation request permanently deleted."
+                )
+
+                st.rerun()
+
+        else:
+
+            st.info("There are no donations available to manage.")
+
+        connection.close()
+   
 
     # ==========================================================
     # OTHER ADMIN AREAS
@@ -719,7 +903,3 @@ def show_admin():
         )
 
     st.divider()
-
-    st.caption(
-        "Pan Ideate Africa Ltd. — Administration Centre"
-    )

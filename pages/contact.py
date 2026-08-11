@@ -1,6 +1,5 @@
 import streamlit as st
-from utils.database import save_message
-
+from utils.database import save_message, get_connection
 def show_page():
 
     st.title("📞 Contact Pan Ideate Africa")
@@ -165,27 +164,15 @@ def show_page():
             use_container_width=True
         )
 
-    if submitted:
+        connection = get_connection()
 
-       if name and message:
+    debug_count = connection.execute(
+        "SELECT COUNT(*) AS count FROM messages"
+    ).fetchone()["count"]
 
-        save_message(
-            name=name,
-            organisation=organisation,
-            subject=subject,
-            message=message
-        )
+    connection.close()
 
-        st.success(
-            "Thank you! Your message has been received. "
-            "We will follow up using the contact details you provide."
-        )
-
-    else:
-
-        st.warning(
-            "Please enter your name and message before submitting."
-        )
+    st.write("DEBUG — Messages after submission:", debug_count)
 
     st.markdown("---")
 
