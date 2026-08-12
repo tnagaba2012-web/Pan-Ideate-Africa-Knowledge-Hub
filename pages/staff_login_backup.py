@@ -1402,239 +1402,89 @@ def show_staff_portal():
     staff = get_current_staff()
 
     if not staff:
+
         logout()
+
         return
 
     unread = get_unread_count()
-    active_staff = get_active_staff()
 
-    # --------------------------------------------------------
-    # STAFF PORTAL HEADER
-    # --------------------------------------------------------
-    st.markdown(
-        """
-        <style>
-        .staff-portal-header {
-            padding: 18px 22px;
-            border-radius: 16px;
-            background: linear-gradient(135deg, #eef7ff, #f8fbff);
-            border: 1px solid #d8e9f5;
-            margin-bottom: 18px;
-        }
-
-        .staff-portal-title {
-            color: #086E8E;
-            font-size: 30px;
-            font-weight: 800;
-            margin-bottom: 4px;
-        }
-
-        .staff-portal-subtitle {
-            color: #5f6b76;
-            font-size: 15px;
-        }
-        </style>
-        """,
-        unsafe_allow_html=True
+    st.sidebar.markdown(
+        "### 🛡️ Staff Portal"
     )
 
-    st.markdown(
-        f"""
-        <div class="staff-portal-header">
-            <div class="staff-portal-title">🛡️ Staff Portal</div>
-            <div class="staff-portal-subtitle">
-                Welcome, <strong>{staff['full_name']}</strong>
-                &nbsp;•&nbsp; {staff['role']}
-                &nbsp;•&nbsp; @{staff['username']}
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True
+    st.sidebar.write(
+        f"👤 **{staff['full_name']}**"
     )
 
-    # --------------------------------------------------------
-    # STAFF STATISTICS
-    # --------------------------------------------------------
-    connection = get_connection()
-    cursor = connection.cursor()
-
-    cursor.execute("SELECT COUNT(*) FROM staff_users")
-    total_staff = cursor.fetchone()[0]
-
-    cursor.execute(
-        "SELECT COUNT(*) FROM staff_users WHERE status = 'Active'"
+    st.sidebar.caption(
+        f"Role: {staff['role']}"
     )
-    active_count = cursor.fetchone()[0]
 
-    cursor.execute(
-        "SELECT COUNT(*) FROM staff_users WHERE status != 'Active'"
-    )
-    inactive_count = cursor.fetchone()[0]
+    st.sidebar.divider()
 
-    connection.close()
-
-    col1, col2, col3, col4 = st.columns(4)
-
-    with col1:
-        st.metric("👥 Total Employees", total_staff)
-
-    with col2:
-        st.metric("🟢 Active Employees", active_count)
-
-    with col3:
-        st.metric("⚪ Inactive Employees", inactive_count)
-
-    with col4:
-        st.metric("✉️ Unread Messages", unread)
-
-    st.divider()
-
-    # --------------------------------------------------------
-    # MAIN STAFF NAVIGATION
-    #
-    # We intentionally use tabs instead of another sidebar
-    # because app.py already owns the main Streamlit sidebar.
-    # --------------------------------------------------------
-    tabs = [
+    sections = [
         "🏠 Dashboard",
+        f"📥 Inbox ({unread})",
+        "✉️ Compose Message",
+        "📤 Sent Messages",
         "👥 Staff Directory",
-        "✉️ Messages",
         "👤 My Profile"
     ]
 
     if staff["role"] == "Super Admin":
-        tabs.append("🛡️ Staff Management")
 
-    selected_tab = st.tabs(tabs)
-
-    # --------------------------------------------------------
-    # DASHBOARD TAB
-    # --------------------------------------------------------
-    with selected_tab[0]:
-        st.subheader("🌍 Pan Ideate Africa Staff Dashboard")
-
-        st.info(
-            """
-            Welcome to the internal Pan Ideate Africa staff portal.
-
-            From here you can communicate with colleagues, view the
-            staff directory, manage your profile, and — if you are a
-            Super Admin — manage staff accounts.
-            """
+        sections.append(
+            "🛡️ Staff Management"
         )
 
-        st.subheader("⚡ Quick Actions")
+    selected = st.sidebar.radio(
+        "Staff Navigation",
+        sections
+    )
 
-        q1, q2, q3 = st.columns(3)
+    st.sidebar.divider()
 
-        with q1:
-            st.markdown("### 👥")
-            st.write("**Staff Directory**")
-            st.caption(
-                f"{active_count} active employee(s) available."
-            )
+    if st.sidebar.button(
+        "🚪 Logout",
+        use_container_width=True
+    ):
 
-        with q2:
-            st.markdown("### ✉️")
-            st.write("**Internal Messages**")
-            if unread:
-                st.warning(
-                    f"You have {unread} unread message(s)."
-                )
-            else:
-                st.caption("Your inbox is up to date.")
+        logout()
 
-        with q3:
-            st.markdown("### 🔐")
-            st.write("**Your Account**")
-            st.caption(
-                f"Role: {staff['role']}"
-            )
-
-        st.divider()
-
-        st.subheader("👥 Current Active Staff")
-
-        if active_staff:
-            for employee in active_staff:
-                with st.container(border=True):
-                    c1, c2, c3 = st.columns([4, 2, 1])
-
-                    with c1:
-                        st.write(
-                            f"**{employee['full_name']}**"
-                        )
-                        st.caption(
-                            f"@{employee['username']} • "
-                            f"{employee['role']}"
-                        )
-
-                    with c2:
-                        st.write("🟢 Active")
-
-                    with c3:
-                        if employee["id"] == staff["id"]:
-                            st.caption("You")
-                        else:
-                            st.caption("Available")
-        else:
-            st.info("No active staff members found.")
+        return
 
     # --------------------------------------------------------
-    # STAFF DIRECTORY TAB
+    # ROUTING
     # --------------------------------------------------------
-    with selected_tab[1]:
+
+    if selected == "🏠 Dashboard":
+
+        show_dashboard()
+
+    elif selected.startswith("📥 Inbox"):
+
+        show_inbox()
+
+    elif selected == "✉️ Compose Message":
+
+        compose_message()
+
+    elif selected == "📤 Sent Messages":
+
+        show_sent()
+
+    elif selected == "👥 Staff Directory":
+
         show_staff_directory()
 
-    # --------------------------------------------------------
-    # MESSAGES TAB
-    # --------------------------------------------------------
-    with selected_tab[2]:
-        st.subheader("✉️ Internal Staff Messages")
+    elif selected == "👤 My Profile":
 
-        inbox_tab, compose_tab, sent_tab = st.tabs(
-            [
-                f"📥 Inbox ({unread})",
-                "📝 Compose Message",
-                "📤 Sent Messages"
-            ]
-        )
-
-        with inbox_tab:
-            show_inbox()
-
-        with compose_tab:
-            compose_message()
-
-        with sent_tab:
-            show_sent()
-
-    # --------------------------------------------------------
-    # PROFILE TAB
-    # --------------------------------------------------------
-    with selected_tab[3]:
         show_profile()
 
-    # --------------------------------------------------------
-    # SUPER ADMIN STAFF MANAGEMENT TAB
-    # --------------------------------------------------------
-    if staff["role"] == "Super Admin":
-        with selected_tab[4]:
-            show_staff_management()
+    elif selected == "🛡️ Staff Management":
 
-    # --------------------------------------------------------
-    # LOGOUT
-    # --------------------------------------------------------
-    st.divider()
-
-    logout_col1, logout_col2, logout_col3 = st.columns([3, 2, 3])
-
-    with logout_col2:
-        if st.button(
-            "🚪 Logout",
-            use_container_width=True
-        ):
-            logout()
+        show_staff_management()
 
 
 # ============================================================
