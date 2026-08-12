@@ -14,6 +14,7 @@ from pages import iron_oxide
 from pages.business_suite_modules import subscriptions
 from pigment_preparation.main import show_pigment_preparation
 from pages.admin import show_admin
+from pages import staff_login
 
 # ============================================
 # PAGE CONFIGURATION
@@ -87,6 +88,7 @@ page = st.sidebar.radio(
         "🟥 Iron Oxide Pigments Handbook",
         "🧪 Pigment Preparation Laboratory",
         "🤖 Artificial Intelligence",
+        "🔐 Staff Login",
         "🔐 Admin Centre",
         "📚 Learning Centre",
 
@@ -173,6 +175,8 @@ elif page == "🌍 Choose a Language":
 elif page == "❤️ Donations & Partnerships":
     donations.show_page()
 # ============================================
+elif page == "🔐 Staff Login":
+    staff_login.show()
 elif page=="🔐 Admin Centre":
     show_admin()
 # ============================================================
