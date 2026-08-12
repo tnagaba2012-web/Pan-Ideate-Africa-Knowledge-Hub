@@ -88,6 +88,8 @@ page = st.sidebar.radio(
         "🟥 Iron Oxide Pigments Handbook",
         "🧪 Pigment Preparation Laboratory",
         "🤖 Artificial Intelligence",
+        "🔐 Staff Login",
+        "🔐 Admin Centre",
         "📚 Learning Centre",
 
         "🚀 Innovation",
@@ -101,26 +103,6 @@ page = st.sidebar.radio(
 st.sidebar.divider()
 
 st.sidebar.success("🚀 Empowering Africa Through Knowledge")
-
-# ============================================================
-# PRIVATE INTERNAL PORTALS
-# ============================================================
-# Staff Login and Admin Centre are hidden from public navigation.
-# Authorized users can open them directly with:
-#   http://localhost:8501/?internal=staff
-#   http://localhost:8501/?internal=admin
-# The Staff/Admin modules retain their own authentication controls.
-# ============================================================
-
-internal = st.query_params.get("internal", "").strip().lower()
-
-if internal == "staff":
-    staff_login.show()
-    st.stop()
-
-if internal == "admin":
-    show_admin()
-    st.stop()
 
 # ============================================
 # HOME
@@ -193,6 +175,10 @@ elif page == "🌍 Choose a Language":
 elif page == "❤️ Donations & Partnerships":
     donations.show_page()
 # ============================================
+elif page == "🔐 Staff Login":
+    staff_login.show()
+elif page=="🔐 Admin Centre":
+    show_admin()
 # ============================================================
 # LEARNING CENTRE
 # ============================================================
