@@ -127,10 +127,262 @@ def show_admin():
         with col3:
             st.metric("💝 Donations", donation_count)
             
-        #SUBSCRIPTION AND MEMBERSHIP MANAGEMENT    
-            
+        # ==========================================================
+# MEMBERSHIP & SUBSCRIPTIONS
+# ==========================================================
+
     elif admin_option == "💳 Membership & Subscriptions":
-        subscriptions.show()        
+
+        st.subheader("💳 Membership & Subscription Management")
+
+        # Make sure the subscriptions table exists
+        subscriptions.ensure_subscription_table()
+
+        connection = get_connection()
+
+        # ------------------------------------------------------
+        # MEMBERSHIP STATISTICS
+        # ------------------------------------------------------
+
+        total_members = connection.execute(
+            "SELECT COUNT(*) FROM subscriptions"
+        ).fetchone()[0]
+
+        pending_members = connection.execute(
+            "SELECT COUNT(*) FROM subscriptions WHERE status = 'Pending'"
+        ).fetchone()[0]
+
+        approved_members = connection.execute(
+            "SELECT COUNT(*) FROM subscriptions WHERE status = 'Approved'"
+        ).fetchone()[0]
+
+        rejected_members = connection.execute(
+            "SELECT COUNT(*) FROM subscriptions WHERE status = 'Rejected'"
+        ).fetchone()[0]
+
+        col1, col2, col3, col4 = st.columns(4)
+
+        with col1:
+            st.metric("👥 Total Requests", total_members)
+
+        with col2:
+            st.metric("🟡 Pending", pending_members)
+
+        with col3:
+            st.metric("🟢 Approved", approved_members)
+
+        with col4:
+            st.metric("🔴 Rejected", rejected_members)
+
+        st.divider()
+
+        # ------------------------------------------------------
+        # FILTER
+        # ------------------------------------------------------
+
+        status_filter = st.selectbox(
+            "Filter membership requests",
+            [
+                "All",
+                "Pending",
+                "Approved",
+                "Rejected"
+            ],
+            key="membership_status_filter"
+        )
+
+        if status_filter == "All":
+
+            membership_rows = connection.execute("""
+                SELECT
+                    id,
+                    full_name,
+                    email,
+                    phone,
+                    plan,
+                    status,
+                    payment_status,
+                    created_at
+                FROM subscriptions
+                ORDER BY id DESC
+            """).fetchall()
+
+        else:
+
+            membership_rows = connection.execute("""
+                SELECT
+                    id,
+                    full_name,
+                    email,
+                    phone,
+                    plan,
+                    status,
+                    payment_status,
+                    created_at
+                FROM subscriptions
+                WHERE status = ?
+                ORDER BY id DESC
+            """, (status_filter,)).fetchall()
+
+        connection.close()
+
+        # ------------------------------------------------------
+        # MEMBERSHIP REQUESTS
+        # ------------------------------------------------------
+
+        st.markdown("### 👥 Membership Requests")
+
+        if not membership_rows:
+
+            st.info("No membership requests found.")
+
+        else:
+
+            st.success(
+                f"{len(membership_rows)} membership request(s) found."
+            )
+
+            for row in membership_rows:
+
+                if row["status"] == "Pending":
+                    status_icon = "🟡"
+
+                elif row["status"] == "Approved":
+                    status_icon = "🟢"
+
+                elif row["status"] == "Rejected":
+                    status_icon = "🔴"
+
+                else:
+                    status_icon = "⚪"
+
+                with st.expander(
+                    f"{status_icon} #{row['id']} — "
+                    f"{row['full_name']} — {row['plan']}"
+                ):
+
+                    st.write(f"**Member:** {row['full_name']}")
+                    st.write(f"**Email:** {row['email']}")
+                    st.write(
+                        f"**Phone:** "
+                        f"{row['phone'] or 'Not provided'}"
+                    )
+                    st.write(f"**Plan:** {row['plan']}")
+                    st.write(
+                        f"**Status:** {status_icon} {row['status']}"
+                    )
+                    st.write(
+                        f"**Payment Status:** "
+                        f"{row['payment_status']}"
+                    )
+                    st.write(
+                        f"**Submitted:** {row['created_at']}"
+                    )
+
+                    st.divider()
+
+                    # --------------------------------------------------
+                    # ADMIN ACTIONS
+                    # --------------------------------------------------
+
+                    action_col1, action_col2, action_col3 = st.columns(3)
+
+                    # APPROVE
+                    with action_col1:
+
+                        if st.button(
+                            "✅ Approve",
+                            key=f"approve_membership_{row['id']}",
+                            disabled=row["status"] == "Approved"
+                        ):
+
+                            update_connection = get_connection()
+
+                            update_connection.execute("""
+                                UPDATE subscriptions
+                                SET status = 'Approved'
+                                WHERE id = ?
+                            """, (row["id"],))
+
+                            update_connection.commit()
+                            update_connection.close()
+
+                            st.success(
+                                f"Membership for "
+                                f"{row['full_name']} approved."
+                            )
+
+                            st.rerun()
+
+                    # REJECT
+                    with action_col2:
+
+                        if st.button(
+                            "❌ Reject",
+                            key=f"reject_membership_{row['id']}",
+                            disabled=row["status"] == "Rejected"
+                        ):
+
+                            update_connection = get_connection()
+
+                            update_connection.execute("""
+                                UPDATE subscriptions
+                                SET status = 'Rejected'
+                                WHERE id = ?
+                            """, (row["id"],))
+
+                            update_connection.commit()
+                            update_connection.close()
+
+                            st.warning(
+                                f"Membership for "
+                                f"{row['full_name']} rejected."
+                            )
+
+                            st.rerun()
+
+                    # DELETE
+                    with action_col3:
+
+                        delete_confirm = st.checkbox(
+                            "Confirm delete",
+                            key=f"confirm_delete_membership_{row['id']}"
+                        )
+
+                        if st.button(
+                            "🗑️ Delete",
+                            key=f"delete_membership_{row['id']}",
+                            disabled=not delete_confirm
+                        ):
+
+                            delete_connection = get_connection()
+
+                            delete_connection.execute("""
+                                DELETE FROM subscriptions
+                                WHERE id = ?
+                            """, (row["id"],))
+
+                            delete_connection.commit()
+                            delete_connection.close()
+
+                            st.success(
+                                "Membership request deleted."
+                            )
+
+                            st.rerun()
+
+        st.divider()
+
+        # ------------------------------------------------------
+        # TEST MODE NOTICE
+        # ------------------------------------------------------
+
+        st.info(
+            "🧪 TEST MODE: Membership approval is currently "
+            "an administrative test action. Real payment processing "
+            "and automatic account activation will be connected "
+            "in a later stage."
+        )
             
             
 
