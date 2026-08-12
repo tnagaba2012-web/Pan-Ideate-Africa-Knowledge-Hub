@@ -4,6 +4,8 @@ import hashlib
 import secrets
 from pathlib import Path
 from datetime import datetime
+import uuid
+import mimetypes
 
 
 # ============================================================
@@ -14,6 +16,9 @@ from datetime import datetime
 BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = BASE_DIR / "data"
 DATABASE_PATH = DATA_DIR / "pan_ideate.db"
+ATTACHMENTS_DIR = DATA_DIR / "staff_attachments"
+MAX_ATTACHMENT_SIZE = 25 * 1024 * 1024
+MAX_ATTACHMENTS_PER_MESSAGE = 5
 
 
 # ============================================================
@@ -24,6 +29,7 @@ def get_connection():
     """Create a connection to the Pan Ideate Africa database."""
 
     DATA_DIR.mkdir(exist_ok=True)
+    ATTACHMENTS_DIR.mkdir(exist_ok=True)
 
     connection = sqlite3.connect(
         DATABASE_PATH,
@@ -163,6 +169,24 @@ def init_database():
             FOREIGN KEY(recipient_id)
                 REFERENCES staff_users(id)
 
+        )
+    """)
+
+    # --------------------------------------------------------
+    # MESSAGE ATTACHMENTS
+    # --------------------------------------------------------
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS staff_message_attachments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            message_id INTEGER NOT NULL,
+            original_name TEXT NOT NULL,
+            stored_name TEXT NOT NULL UNIQUE,
+            mime_type TEXT,
+            file_size INTEGER NOT NULL,
+            uploaded_by INTEGER NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(message_id) REFERENCES staff_messages(id),
+            FOREIGN KEY(uploaded_by) REFERENCES staff_users(id)
         )
     """)
 
@@ -727,15 +751,116 @@ def show_profile():
 
 
 # ============================================================
+# MESSAGE ATTACHMENT HELPERS
+# ============================================================
+
+def save_message_attachment(uploaded_file, message_id, uploaded_by):
+    """Save an uploaded file with a private generated filename."""
+    if uploaded_file is None:
+        return None
+
+    data = uploaded_file.getvalue()
+    if len(data) > MAX_ATTACHMENT_SIZE:
+        raise ValueError(
+            f"{uploaded_file.name} is larger than 25 MB."
+        )
+
+    safe_suffix = Path(uploaded_file.name).suffix.lower()
+    stored_name = f"{uuid.uuid4().hex}{safe_suffix}"
+    destination = ATTACHMENTS_DIR / stored_name
+    destination.write_bytes(data)
+
+    mime_type = uploaded_file.type or mimetypes.guess_type(
+        uploaded_file.name
+    )[0] or "application/octet-stream"
+
+    connection = get_connection()
+    cursor = connection.cursor()
+    cursor.execute(
+        """
+        INSERT INTO staff_message_attachments
+        (message_id, original_name, stored_name, mime_type, file_size, uploaded_by)
+        VALUES (?, ?, ?, ?, ?, ?)
+        """,
+        (
+            message_id,
+            uploaded_file.name,
+            stored_name,
+            mime_type,
+            len(data),
+            uploaded_by
+        )
+    )
+    connection.commit()
+    connection.close()
+    return stored_name
+
+
+def get_message_attachments(message_id):
+    connection = get_connection()
+    cursor = connection.cursor()
+    cursor.execute(
+        """
+        SELECT id, original_name, stored_name, mime_type, file_size
+        FROM staff_message_attachments
+        WHERE message_id = ?
+        ORDER BY id
+        """,
+        (message_id,)
+    )
+    rows = cursor.fetchall()
+    connection.close()
+    return rows
+
+
+def format_file_size(size):
+    if size < 1024:
+        return f"{size} B"
+    if size < 1024 * 1024:
+        return f"{size / 1024:.1f} KB"
+    return f"{size / (1024 * 1024):.1f} MB"
+
+
+def show_attachments(message_id):
+    attachments = get_message_attachments(message_id)
+    if not attachments:
+        return
+
+    st.markdown("**📎 Attachments**")
+    for attachment in attachments:
+        path = ATTACHMENTS_DIR / attachment["stored_name"]
+        if not path.exists():
+            st.warning(
+                f"Attachment unavailable: {attachment['original_name']}"
+            )
+            continue
+        data = path.read_bytes()
+        st.download_button(
+            label=(
+                f"📎 {attachment['original_name']} "
+                f"({format_file_size(attachment['file_size'])})"
+            ),
+            data=data,
+            file_name=attachment["original_name"],
+            mime=attachment["mime_type"] or "application/octet-stream",
+            key=f"download_attachment_{attachment['id']}",
+            use_container_width=True
+        )
+
+
+# ============================================================
 # COMPOSE MESSAGE
 # ============================================================
 
 def compose_message():
 
     st.title("✉️ Compose Message")
+    st.caption(
+        "Send a private message to another active Pan Ideate Africa staff member. "
+        "Attachments are visible only to the sender and recipient."
+    )
 
     staff_id = st.session_state.get("staff_id")
-
     employees = [
         employee
         for employee in get_active_staff()
@@ -743,24 +868,18 @@ def compose_message():
     ]
 
     if not employees:
-
         st.warning(
-            "There are currently no other active staff "
-            "members to message."
+            "There are currently no other active staff members to message."
         )
-
         return
 
     employee_options = {
-        f"{employee['full_name']} "
-        f"(@{employee['username']}) — {employee['role']}":
+        f"{employee['full_name']} (@{employee['username']}) — {employee['role']}":
         employee["id"]
-
         for employee in employees
     }
 
-    with st.form("compose_message_form"):
-
+    with st.form("compose_message_form", clear_on_submit=True):
         recipient_label = st.selectbox(
             "To",
             list(employee_options.keys())
@@ -777,64 +896,98 @@ def compose_message():
             height=220
         )
 
+        uploaded_files = st.file_uploader(
+            "📎 Attach files (optional)",
+            type=[
+                "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx",
+                "csv", "txt", "jpg", "jpeg", "png", "gif", "webp",
+                "zip"
+            ],
+            accept_multiple_files=True,
+            help="Maximum 5 files. Maximum 25 MB per file."
+        )
+
+        if uploaded_files:
+            if len(uploaded_files) > MAX_ATTACHMENTS_PER_MESSAGE:
+                st.warning(
+                    f"You selected {len(uploaded_files)} files. "
+                    f"Only the first {MAX_ATTACHMENTS_PER_MESSAGE} will be sent."
+                )
+            selected_files = uploaded_files[:MAX_ATTACHMENTS_PER_MESSAGE]
+            st.caption(
+                "Selected: " + ", ".join(
+                    f"{f.name} ({format_file_size(f.size)})"
+                    for f in selected_files
+                )
+            )
+        else:
+            selected_files = []
+
         send = st.form_submit_button(
             "📨 Send Message",
             use_container_width=True,
             type="primary"
         )
 
-        if send:
+    if send:
+        recipient_id = employee_options[recipient_label]
 
-            recipient_id = employee_options[
-                recipient_label
-            ]
+        if not subject.strip():
+            st.error("Please enter a subject.")
+            return
 
-            if not subject.strip():
+        if not message.strip():
+            st.error("Please enter a message.")
+            return
 
-                st.error(
-                    "Please enter a subject."
-                )
-
-                return
-
-            if not message.strip():
-
-                st.error(
-                    "Please enter a message."
-                )
-
-                return
-
-            connection = get_connection()
-            cursor = connection.cursor()
-
-            cursor.execute(
-                """
-                INSERT INTO staff_messages
-                (
-                    sender_id,
-                    recipient_id,
-                    subject,
-                    message
-                )
-                VALUES (?, ?, ?, ?)
-                """,
-                (
-                    staff_id,
-                    recipient_id,
-                    subject.strip(),
-                    message.strip()
-                )
+        oversized = [
+            f.name for f in selected_files
+            if f.size > MAX_ATTACHMENT_SIZE
+        ]
+        if oversized:
+            st.error(
+                "These files exceed the 25 MB limit: "
+                + ", ".join(oversized)
             )
+            return
 
-            connection.commit()
-            connection.close()
-
-            st.success(
-                "✅ Message sent successfully."
+        connection = get_connection()
+        cursor = connection.cursor()
+        cursor.execute(
+            """
+            INSERT INTO staff_messages
+            (sender_id, recipient_id, subject, message)
+            VALUES (?, ?, ?, ?)
+            """,
+            (
+                staff_id,
+                recipient_id,
+                subject.strip(),
+                message.strip()
             )
+        )
+        message_id = cursor.lastrowid
+        connection.commit()
+        connection.close()
 
-            st.rerun()
+        try:
+            for uploaded_file in selected_files:
+                save_message_attachment(
+                    uploaded_file,
+                    message_id,
+                    staff_id
+                )
+        except Exception as exc:
+            st.error(
+                f"The message was created, but an attachment could not be saved: {exc}"
+            )
+            return
+
+        st.success(
+            "✅ Message sent successfully"
+            + (f" with {len(selected_files)} attachment(s)." if selected_files else ".")
+        )
+        st.rerun()
 
 
 # ============================================================
@@ -925,6 +1078,7 @@ def show_inbox():
             st.divider()
 
             st.write(message["message"])
+            show_attachments(message["id"])
 
             if message["is_read"] == 0:
 
@@ -1024,6 +1178,7 @@ def show_sent():
             st.divider()
 
             st.write(message["message"])
+            show_attachments(message["id"])
 
 
 # ============================================================
@@ -1591,6 +1746,10 @@ def show_staff_portal():
     # --------------------------------------------------------
     with selected_tab[2]:
         st.subheader("✉️ Internal Staff Messages")
+        st.info(
+            "🔒 Private messaging: you can only see messages sent to you or messages you sent. "
+            "Attachments are also restricted to the sender and recipient."
+        )
 
         inbox_tab, compose_tab, sent_tab = st.tabs(
             [
