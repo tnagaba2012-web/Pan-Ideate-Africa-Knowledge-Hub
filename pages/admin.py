@@ -22,6 +22,7 @@ from pages.notification_centre import (
     show_notification_centre,
     get_notification_count,
 )
+from pages.task_manager import show_admin_task_manager
 
 # ============================================================
 # PAN IDEATE AFRICA
@@ -111,6 +112,7 @@ def show_admin():
             "🤝 Partnership Requests",
             "❤️ Donation Requests",
             "👥 Staff Management",
+            "📋 Task & Project Manager",
             "💬 Staff Communications",
             "✉️ Staff Messages",
             "🔔 Notification Centre",
@@ -1272,6 +1274,29 @@ def show_admin():
                             st.rerun()
                         except ValueError as error:
                             st.error(str(error))
+
+    # ========================================================
+    # TASK & PROJECT MANAGER
+    # ========================================================
+
+    elif admin_option == "📋 Task & Project Manager":
+        admin_staff_id = None
+        connection = get_connection()
+        row = connection.execute("""
+            SELECT id
+            FROM staff_users
+            WHERE LOWER(username) = 'admin' AND status = 'Active'
+            LIMIT 1
+        """).fetchone()
+        connection.close()
+
+        if row:
+            admin_staff_id = row["id"]
+
+        if admin_staff_id:
+            show_admin_task_manager(admin_staff_id)
+        else:
+            st.error("The active Super Admin staff account could not be found.")
 
     # ========================================================
     # STAFF MESSAGES
