@@ -1041,10 +1041,22 @@ def show_admin():
         )
     elif admin_option == "✉️ Staff Messages":
         show_admin_staff_messages()
+        
         # ----------------------------------------------------
         # DIRECTORY
         # ----------------------------------------------------
+        
+        st.title("🛡️ Staff Management")
 
+        tab1, tab2 = st.tabs(
+        [
+        "👥 Staff Accounts",
+        "➕ Add Staff Member"
+        ]
+     )
+
+
+    # Staff Accounts code
         with tab1:
 
             staff_list = get_all_staff()
