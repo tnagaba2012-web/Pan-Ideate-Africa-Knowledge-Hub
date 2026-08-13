@@ -1,3 +1,4 @@
+
 import streamlit as st
 import sqlite3
 from pathlib import Path
@@ -71,10 +72,9 @@ def create_notification(
         priority = "normal"
 
     init_notification_database()
-
     connection = get_notification_connection()
-    cursor = connection.cursor()
 
+    cursor = connection.cursor()
     cursor.execute("""
         INSERT INTO notifications
         (user_id, notification_type, title, message, priority,
@@ -124,7 +124,7 @@ def create_notifications(
     return created
 
 
-def get_notifications(user_id, unread_only=False, limit=100):
+def get_notifications(user_id, limit=100):
     if not user_id:
         return []
 
@@ -137,22 +137,13 @@ def get_notifications(user_id, unread_only=False, limit=100):
 
     connection = get_notification_connection()
 
-    if unread_only:
-        rows = connection.execute("""
-            SELECT *
-            FROM notifications
-            WHERE user_id = ? AND is_read = 0
-            ORDER BY created_at DESC, id DESC
-            LIMIT ?
-        """, (user_id, limit)).fetchall()
-    else:
-        rows = connection.execute("""
-            SELECT *
-            FROM notifications
-            WHERE user_id = ?
-            ORDER BY created_at DESC, id DESC
-            LIMIT ?
-        """, (user_id, limit)).fetchall()
+    rows = connection.execute("""
+        SELECT *
+        FROM notifications
+        WHERE user_id = ?
+        ORDER BY created_at DESC, id DESC
+        LIMIT ?
+    """, (user_id, limit)).fetchall()
 
     connection.close()
     return rows
@@ -176,9 +167,6 @@ def get_notification_count(user_id):
 
 
 def mark_notification_read(notification_id, user_id):
-    if not notification_id or not user_id:
-        return False
-
     init_notification_database()
     connection = get_notification_connection()
 
@@ -196,9 +184,6 @@ def mark_notification_read(notification_id, user_id):
 
 
 def mark_all_notifications_read(user_id):
-    if not user_id:
-        return 0
-
     init_notification_database()
     connection = get_notification_connection()
 
@@ -216,9 +201,6 @@ def mark_all_notifications_read(user_id):
 
 
 def delete_notification(notification_id, user_id):
-    if not notification_id or not user_id:
-        return False
-
     init_notification_database()
     connection = get_notification_connection()
 
@@ -235,9 +217,6 @@ def delete_notification(notification_id, user_id):
 
 
 def clear_read_notifications(user_id):
-    if not user_id:
-        return 0
-
     init_notification_database()
     connection = get_notification_connection()
 
@@ -254,7 +233,7 @@ def clear_read_notifications(user_id):
 
 
 def notification_icon(notification_type):
-    icons = {
+    return {
         "message": "✉️",
         "message_reply": "↩️",
         "message_read": "✓✓",
@@ -268,8 +247,7 @@ def notification_icon(notification_type):
         "security": "🔐",
         "system": "⚙️",
         "general": "🔔",
-    }
-    return icons.get(notification_type, "🔔")
+    }.get(notification_type, "🔔")
 
 
 def priority_label(priority):
@@ -279,6 +257,199 @@ def priority_label(priority):
         "high": "High",
         "urgent": "Urgent",
     }.get(priority, "Normal")
+
+
+def get_staff_role(user_id):
+    connection = get_notification_connection()
+
+    row = connection.execute("""
+        SELECT role
+        FROM staff_users
+        WHERE id = ? AND status = 'Active'
+        LIMIT 1
+    """, (user_id,)).fetchone()
+
+    connection.close()
+    return row["role"] if row else None
+
+
+def get_active_staff(exclude_user_id=None):
+    connection = get_notification_connection()
+
+    if exclude_user_id:
+        rows = connection.execute("""
+            SELECT id, full_name, username, role
+            FROM staff_users
+            WHERE status = 'Active' AND id != ?
+            ORDER BY full_name
+        """, (exclude_user_id,)).fetchall()
+    else:
+        rows = connection.execute("""
+            SELECT id, full_name, username, role
+            FROM staff_users
+            WHERE status = 'Active'
+            ORDER BY full_name
+        """).fetchall()
+
+    connection.close()
+    return rows
+
+
+def show_send_notification(user_id):
+    """Send authorized internal notifications."""
+    role = get_staff_role(user_id)
+
+    if not role:
+        st.error("Your staff account could not be identified.")
+        return
+
+    staff = get_active_staff(exclude_user_id=user_id)
+
+    if not staff:
+        st.info("There are no other active staff members.")
+        return
+
+    st.markdown("### 📢 Send Notification")
+
+    if role == "Super Admin":
+        mode = st.radio(
+            "Recipients",
+            [
+                "👤 One Employee",
+                "👥 Selected Employees",
+                "📢 All Active Staff",
+            ],
+            horizontal=True,
+            key="notification_recipient_mode",
+        )
+
+        labels = [
+            f"{p['full_name']} (@{p['username']}) — {p['role']}"
+            for p in staff
+        ]
+
+        if mode == "👤 One Employee":
+            selected = st.selectbox(
+                "Select employee",
+                labels,
+                key="notification_one_employee",
+            )
+            recipient_ids = [
+                staff[labels.index(selected)]["id"]
+            ]
+
+        elif mode == "👥 Selected Employees":
+            selected = st.multiselect(
+                "Select employees",
+                labels,
+                key="notification_selected_employees",
+            )
+            recipient_ids = [
+                staff[labels.index(label)]["id"]
+                for label in selected
+            ]
+
+        else:
+            recipient_ids = [p["id"] for p in staff]
+            st.info(
+                f"Broadcast will reach {len(recipient_ids)} "
+                "active employee(s)."
+            )
+
+    else:
+        labels = [
+            f"{p['full_name']} (@{p['username']}) — {p['role']}"
+            for p in staff
+        ]
+
+        selected = st.selectbox(
+            "Send directly to",
+            labels,
+            key="staff_notification_recipient",
+        )
+
+        recipient_ids = [
+            staff[labels.index(selected)]["id"]
+        ]
+
+        st.caption(
+            "Staff can send direct notifications to another colleague. "
+            "Organization-wide broadcasts are reserved for Super Admin."
+        )
+
+    with st.form("send_notification_form", clear_on_submit=True):
+        title = st.text_input(
+            "Notification Title",
+            placeholder="e.g. Staff Meeting Tomorrow",
+        )
+
+        message = st.text_area(
+            "Notification Message",
+            placeholder="Write the alert or notice...",
+            height=140,
+        )
+
+        notification_type = st.selectbox(
+            "Notification Type",
+            [
+                ("general", "🔔 General"),
+                ("message", "✉️ Message Alert"),
+                ("message_reply", "↩️ Reply Alert"),
+                ("attachment", "📎 Attachment Alert"),
+                ("task", "📋 Task"),
+                ("task_due", "⏰ Deadline"),
+                ("calendar", "📅 Calendar"),
+                ("announcement", "📢 Announcement"),
+                ("approval", "✅ Approval"),
+                ("document", "📄 Document"),
+                ("security", "🔐 Security"),
+            ],
+            format_func=lambda x: x[1],
+        )
+
+        priority = st.selectbox(
+            "Priority",
+            [
+                ("low", "🟢 Low"),
+                ("normal", "🔵 Normal"),
+                ("high", "🟠 High"),
+                ("urgent", "🔴 Urgent"),
+            ],
+            format_func=lambda x: x[1],
+        )
+
+        send = st.form_submit_button(
+            "📨 Send Notification",
+            use_container_width=True,
+            type="primary",
+        )
+
+    if send:
+        if not recipient_ids:
+            st.error("Please select at least one recipient.")
+            return
+
+        if not title.strip():
+            st.error("Please enter a notification title.")
+            return
+
+        if not message.strip():
+            st.error("Please enter a notification message.")
+            return
+
+        created = create_notifications(
+            recipient_ids,
+            title.strip(),
+            message.strip(),
+            notification_type[0],
+            priority[0],
+            related_type="manual_notification",
+        )
+
+        st.success(
+            f"✅ Notification sent to {len(created)} recipient(s)."
+        )
+        st.rerun()
 
 
 def show_notification_centre(user_id):
@@ -292,96 +463,118 @@ def show_notification_centre(user_id):
     st.subheader("🔔 Notification Centre")
 
     if unread_count:
-        st.info(f"You have {unread_count} unread notification(s).")
+        st.info(
+            f"You have {unread_count} unread notification(s)."
+        )
     else:
         st.success("✅ You are all caught up.")
 
-    col1, col2 = st.columns(2)
+    inbox_tab, send_tab = st.tabs([
+        "🔔 My Notifications",
+        "📢 Send Notification",
+    ])
 
-    with col1:
-        if unread_count and st.button(
-            "✓✓ Mark All as Read",
-            use_container_width=True,
-            key="notification_mark_all_read",
-        ):
-            mark_all_notifications_read(user_id)
-            st.rerun()
+    with inbox_tab:
+        col1, col2 = st.columns(2)
 
-    with col2:
-        if st.button(
-            "🧹 Clear Read Notifications",
-            use_container_width=True,
-            key="notification_clear_read",
-        ):
-            deleted = clear_read_notifications(user_id)
-            if deleted:
-                st.success(f"{deleted} read notification(s) cleared.")
-            else:
-                st.info("There are no read notifications to clear.")
-            st.rerun()
+        with col1:
+            if unread_count and st.button(
+                "✓✓ Mark All as Read",
+                use_container_width=True,
+                key="notification_mark_all_read",
+            ):
+                mark_all_notifications_read(user_id)
+                st.rerun()
 
-    st.divider()
+        with col2:
+            if st.button(
+                "🧹 Clear Read Notifications",
+                use_container_width=True,
+                key="notification_clear_read",
+            ):
+                clear_read_notifications(user_id)
+                st.rerun()
 
-    notifications = get_notifications(user_id, limit=100)
+        st.divider()
 
-    if not notifications:
-        st.info("No notifications yet.")
-        return
+        notifications = get_notifications(user_id)
 
-    for notification in notifications:
-        icon = notification_icon(notification["notification_type"])
-        status = "🔵 UNREAD" if notification["is_read"] == 0 else "⚪ Read"
-
-        with st.container(border=True):
-            top1, top2 = st.columns([5, 1])
-
-            with top1:
-                st.markdown(f"### {icon} {notification['title']}")
-
-            with top2:
-                st.caption(status)
-
-            st.write(notification["message"])
-
-            meta1, meta2 = st.columns(2)
-
-            with meta1:
-                st.caption(
-                    f"Priority: {priority_label(notification['priority'])}"
+        if not notifications:
+            st.info("No notifications yet.")
+        else:
+            for item in notifications:
+                icon = notification_icon(
+                    item["notification_type"]
+                )
+                status = (
+                    "🔵 UNREAD"
+                    if item["is_read"] == 0
+                    else "⚪ Read"
                 )
 
-            with meta2:
-                st.caption(f"Received: {notification['created_at']}")
+                with st.container(border=True):
+                    left, right = st.columns([5, 1])
 
-            actions = st.columns(2)
-
-            with actions[0]:
-                if notification["is_read"] == 0:
-                    if st.button(
-                        "✓ Mark as Read",
-                        key=f"notification_read_{notification['id']}",
-                        use_container_width=True,
-                    ):
-                        mark_notification_read(
-                            notification["id"],
-                            user_id,
+                    with left:
+                        st.markdown(
+                            f"### {icon} {item['title']}"
                         )
-                        st.rerun()
 
-            with actions[1]:
-                if st.button(
-                    "🗑️ Delete",
-                    key=f"notification_delete_{notification['id']}",
-                    use_container_width=True,
-                ):
-                    delete_notification(
-                        notification["id"],
-                        user_id,
-                    )
-                    st.rerun()
+                    with right:
+                        st.caption(status)
+
+                    st.write(item["message"])
+
+                    c1, c2 = st.columns(2)
+
+                    with c1:
+                        st.caption(
+                            f"Priority: "
+                            f"{priority_label(item['priority'])}"
+                        )
+
+                    with c2:
+                        st.caption(
+                            f"Received: {item['created_at']}"
+                        )
+
+                    a1, a2 = st.columns(2)
+
+                    with a1:
+                        if item["is_read"] == 0:
+                            if st.button(
+                                "✓ Mark as Read",
+                                key=f"notification_read_{item['id']}",
+                                use_container_width=True,
+                            ):
+                                mark_notification_read(
+                                    item["id"],
+                                    user_id,
+                                )
+                                st.rerun()
+
+                    with a2:
+                        if st.button(
+                            "🗑️ Delete",
+                            key=f"notification_delete_{item['id']}",
+                            use_container_width=True,
+                        ):
+                            delete_notification(
+                                item["id"],
+                                user_id,
+                            )
+                            st.rerun()
+
+    with send_tab:
+        show_send_notification(user_id)
 
 
-def notify_new_message(recipient_id, sender_name, subject, message_id=None):
+def notify_new_message(
+    recipient_id,
+    sender_name,
+    subject,
+    message_id=None,
+):
     return create_notification(
         recipient_id,
         "New Staff Message",
@@ -393,7 +586,12 @@ def notify_new_message(recipient_id, sender_name, subject, message_id=None):
     )
 
 
-def notify_message_reply(recipient_id, sender_name, subject, message_id=None):
+def notify_message_reply(
+    recipient_id,
+    sender_name,
+    subject,
+    message_id=None,
+):
     return create_notification(
         recipient_id,
         "New Message Reply",
@@ -405,7 +603,12 @@ def notify_message_reply(recipient_id, sender_name, subject, message_id=None):
     )
 
 
-def notify_message_read(sender_id, reader_name, subject, message_id=None):
+def notify_message_read(
+    sender_id,
+    reader_name,
+    subject,
+    message_id=None,
+):
     return create_notification(
         sender_id,
         "Message Read",
@@ -417,7 +620,12 @@ def notify_message_read(sender_id, reader_name, subject, message_id=None):
     )
 
 
-def notify_attachment(recipient_id, sender_name, filename, message_id=None):
+def notify_attachment(
+    recipient_id,
+    sender_name,
+    filename,
+    message_id=None,
+):
     return create_notification(
         recipient_id,
         "Attachment Received",
