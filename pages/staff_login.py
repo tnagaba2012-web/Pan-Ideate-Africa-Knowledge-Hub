@@ -1,4 +1,8 @@
 import streamlit as st
+from pages.notification_centre import (
+    show_notification_centre,
+    get_notification_count,
+)
 import sqlite3
 import hashlib
 import secrets
@@ -1770,8 +1774,11 @@ def show_staff_portal():
     # We intentionally use tabs instead of another sidebar
     # because app.py already owns the main Streamlit sidebar.
     # --------------------------------------------------------
+    notification_count = get_notification_count(staff["id"])
+
     tabs = [
         "🏠 Dashboard",
+        f"🔔 Notifications ({notification_count})",
         "👥 Staff Directory",
         "✉️ Messages",
         "👤 My Profile"
@@ -1859,12 +1866,18 @@ def show_staff_portal():
     # STAFF DIRECTORY TAB
     # --------------------------------------------------------
     with selected_tab[1]:
+        show_notification_centre(staff["id"])
+
+    # --------------------------------------------------------
+    # STAFF DIRECTORY TAB
+    # --------------------------------------------------------
+    with selected_tab[2]:
         show_staff_directory()
 
     # --------------------------------------------------------
     # MESSAGES TAB
     # --------------------------------------------------------
-    with selected_tab[2]:
+    with selected_tab[3]:
         st.subheader("✉️ Internal Staff Messages")
         st.info(
             "🔒 Private messaging: you can only see messages sent to you or messages you sent. "
@@ -1891,14 +1904,14 @@ def show_staff_portal():
     # --------------------------------------------------------
     # PROFILE TAB
     # --------------------------------------------------------
-    with selected_tab[3]:
+    with selected_tab[4]:
         show_profile()
 
     # --------------------------------------------------------
     # SUPER ADMIN STAFF MANAGEMENT TAB
     # --------------------------------------------------------
     if staff["role"] == "Super Admin":
-        with selected_tab[4]:
+        with selected_tab[5]:
             show_staff_management()
 
     # --------------------------------------------------------

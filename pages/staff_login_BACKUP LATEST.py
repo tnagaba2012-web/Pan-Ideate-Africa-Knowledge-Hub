@@ -4,6 +4,8 @@ import hashlib
 import secrets
 from pathlib import Path
 from datetime import datetime
+import uuid
+import mimetypes
 
 
 # ============================================================
@@ -14,6 +16,9 @@ from datetime import datetime
 BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = BASE_DIR / "data"
 DATABASE_PATH = DATA_DIR / "pan_ideate.db"
+ATTACHMENTS_DIR = DATA_DIR / "staff_attachments"
+MAX_ATTACHMENT_SIZE = 25 * 1024 * 1024
+MAX_ATTACHMENTS_PER_MESSAGE = 5
 
 
 # ============================================================
@@ -24,6 +29,7 @@ def get_connection():
     """Create a connection to the Pan Ideate Africa database."""
 
     DATA_DIR.mkdir(exist_ok=True)
+    ATTACHMENTS_DIR.mkdir(exist_ok=True)
 
     connection = sqlite3.connect(
         DATABASE_PATH,
@@ -165,6 +171,37 @@ def init_database():
 
         )
     """)
+
+    # --------------------------------------------------------
+    # MESSAGE ATTACHMENTS
+    # --------------------------------------------------------
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS staff_message_attachments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            message_id INTEGER NOT NULL,
+            original_name TEXT NOT NULL,
+            stored_name TEXT NOT NULL UNIQUE,
+            mime_type TEXT,
+            file_size INTEGER NOT NULL,
+            uploaded_by INTEGER NOT NULL,
+            file_data BLOB,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(message_id) REFERENCES staff_messages(id),
+            FOREIGN KEY(uploaded_by) REFERENCES staff_users(id)
+        )
+    """)
+
+    # --------------------------------------------------------
+    # ATTACHMENT STORAGE MIGRATION
+    # --------------------------------------------------------
+    cursor.execute("PRAGMA table_info(staff_message_attachments)")
+    attachment_columns = {row["name"] for row in cursor.fetchall()}
+
+    if "file_data" not in attachment_columns:
+        cursor.execute(
+            "ALTER TABLE staff_message_attachments "
+            "ADD COLUMN file_data BLOB"
+        )
 
     connection.commit()
     connection.close()
@@ -727,15 +764,115 @@ def show_profile():
 
 
 # ============================================================
+# MESSAGE ATTACHMENT HELPERS
+# ============================================================
+
+def save_message_attachment(uploaded_file, message_id, uploaded_by):
+    """Save an attachment in the database and keep a local fallback copy."""
+    if uploaded_file is None:
+        return None
+
+    data = uploaded_file.getvalue()
+    if len(data) > MAX_ATTACHMENT_SIZE:
+        raise ValueError(f"{uploaded_file.name} is larger than 25 MB.")
+
+    safe_suffix = Path(uploaded_file.name).suffix.lower()
+    stored_name = f"{uuid.uuid4().hex}{safe_suffix}"
+    (ATTACHMENTS_DIR / stored_name).write_bytes(data)
+
+    mime_type = (
+        uploaded_file.type
+        or mimetypes.guess_type(uploaded_file.name)[0]
+        or "application/octet-stream"
+    )
+
+    connection = get_connection()
+    cursor = connection.cursor()
+    cursor.execute(
+        """
+        INSERT INTO staff_message_attachments
+        (message_id, original_name, stored_name, mime_type, file_size, uploaded_by, file_data)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+        (message_id, uploaded_file.name, stored_name, mime_type, len(data), uploaded_by, sqlite3.Binary(data))
+    )
+    connection.commit()
+    connection.close()
+    return stored_name
+
+
+def get_message_attachments(message_id, staff_id):
+    """Return attachments only for the sender or recipient of the message."""
+    connection = get_connection()
+    cursor = connection.cursor()
+    cursor.execute(
+        """
+        SELECT a.id, a.original_name, a.stored_name, a.mime_type, a.file_size, a.file_data
+        FROM staff_message_attachments AS a
+        JOIN staff_messages AS m ON a.message_id = m.id
+        WHERE a.message_id = ?
+          AND (m.sender_id = ? OR m.recipient_id = ?)
+        ORDER BY a.id
+        """,
+        (message_id, staff_id, staff_id)
+    )
+    rows = cursor.fetchall()
+    connection.close()
+    return rows
+
+
+def format_file_size(size):
+    if size < 1024:
+        return f"{size} B"
+    if size < 1024 * 1024:
+        return f"{size / 1024:.1f} KB"
+    return f"{size / (1024 * 1024):.1f} MB"
+
+
+def show_attachments(message_id, staff_id):
+    """Show authorized attachments, using database data first."""
+    attachments = get_message_attachments(message_id, staff_id)
+    if not attachments:
+        return
+
+    st.markdown("**📎 Attachments**")
+    for attachment in attachments:
+        data = attachment["file_data"]
+
+        # Compatibility with attachments created by the previous version.
+        if data is None:
+            path = ATTACHMENTS_DIR / attachment["stored_name"]
+            if path.exists():
+                data = path.read_bytes()
+
+        if data is None:
+            st.warning(f"Attachment unavailable: {attachment['original_name']}")
+            continue
+
+        st.download_button(
+            label=(f"📎 {attachment['original_name']} "
+                   f"({format_file_size(attachment['file_size'])})"),
+            data=bytes(data),
+            file_name=attachment["original_name"],
+            mime=attachment["mime_type"] or "application/octet-stream",
+            key=f"download_attachment_{attachment['id']}_{staff_id}",
+            use_container_width=True
+        )
+
+
+# ============================================================
 # COMPOSE MESSAGE
 # ============================================================
 
 def compose_message():
 
     st.title("✉️ Compose Message")
+    st.caption(
+        "Send a private message to another active Pan Ideate Africa staff member. "
+        "Attachments are visible only to the sender and recipient."
+    )
 
     staff_id = st.session_state.get("staff_id")
-
     employees = [
         employee
         for employee in get_active_staff()
@@ -743,24 +880,18 @@ def compose_message():
     ]
 
     if not employees:
-
         st.warning(
-            "There are currently no other active staff "
-            "members to message."
+            "There are currently no other active staff members to message."
         )
-
         return
 
     employee_options = {
-        f"{employee['full_name']} "
-        f"(@{employee['username']}) — {employee['role']}":
+        f"{employee['full_name']} (@{employee['username']}) — {employee['role']}":
         employee["id"]
-
         for employee in employees
     }
 
-    with st.form("compose_message_form"):
-
+    with st.form("compose_message_form", clear_on_submit=True):
         recipient_label = st.selectbox(
             "To",
             list(employee_options.keys())
@@ -777,64 +908,98 @@ def compose_message():
             height=220
         )
 
+        uploaded_files = st.file_uploader(
+            "📎 Attach files (optional)",
+            type=[
+                "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx",
+                "csv", "txt", "jpg", "jpeg", "png", "gif", "webp",
+                "zip"
+            ],
+            accept_multiple_files=True,
+            help="Maximum 5 files. Maximum 25 MB per file."
+        )
+
+        if uploaded_files:
+            if len(uploaded_files) > MAX_ATTACHMENTS_PER_MESSAGE:
+                st.warning(
+                    f"You selected {len(uploaded_files)} files. "
+                    f"Only the first {MAX_ATTACHMENTS_PER_MESSAGE} will be sent."
+                )
+            selected_files = uploaded_files[:MAX_ATTACHMENTS_PER_MESSAGE]
+            st.caption(
+                "Selected: " + ", ".join(
+                    f"{f.name} ({format_file_size(f.size)})"
+                    for f in selected_files
+                )
+            )
+        else:
+            selected_files = []
+
         send = st.form_submit_button(
             "📨 Send Message",
             use_container_width=True,
             type="primary"
         )
 
-        if send:
+    if send:
+        recipient_id = employee_options[recipient_label]
 
-            recipient_id = employee_options[
-                recipient_label
-            ]
+        if not subject.strip():
+            st.error("Please enter a subject.")
+            return
 
-            if not subject.strip():
+        if not message.strip():
+            st.error("Please enter a message.")
+            return
 
-                st.error(
-                    "Please enter a subject."
-                )
-
-                return
-
-            if not message.strip():
-
-                st.error(
-                    "Please enter a message."
-                )
-
-                return
-
-            connection = get_connection()
-            cursor = connection.cursor()
-
-            cursor.execute(
-                """
-                INSERT INTO staff_messages
-                (
-                    sender_id,
-                    recipient_id,
-                    subject,
-                    message
-                )
-                VALUES (?, ?, ?, ?)
-                """,
-                (
-                    staff_id,
-                    recipient_id,
-                    subject.strip(),
-                    message.strip()
-                )
+        oversized = [
+            f.name for f in selected_files
+            if f.size > MAX_ATTACHMENT_SIZE
+        ]
+        if oversized:
+            st.error(
+                "These files exceed the 25 MB limit: "
+                + ", ".join(oversized)
             )
+            return
 
-            connection.commit()
-            connection.close()
-
-            st.success(
-                "✅ Message sent successfully."
+        connection = get_connection()
+        cursor = connection.cursor()
+        cursor.execute(
+            """
+            INSERT INTO staff_messages
+            (sender_id, recipient_id, subject, message)
+            VALUES (?, ?, ?, ?)
+            """,
+            (
+                staff_id,
+                recipient_id,
+                subject.strip(),
+                message.strip()
             )
+        )
+        message_id = cursor.lastrowid
+        connection.commit()
+        connection.close()
 
-            st.rerun()
+        try:
+            for uploaded_file in selected_files:
+                save_message_attachment(
+                    uploaded_file,
+                    message_id,
+                    staff_id
+                )
+        except Exception as exc:
+            st.error(
+                f"The message was created, but an attachment could not be saved: {exc}"
+            )
+            return
+
+        st.success(
+            "✅ Message sent successfully"
+            + (f" with {len(selected_files)} attachment(s)." if selected_files else ".")
+        )
+        st.rerun()
 
 
 # ============================================================
@@ -925,6 +1090,115 @@ def show_inbox():
             st.divider()
 
             st.write(message["message"])
+            show_attachments(message["id"], staff_id)
+
+            # ----------------------------------------------------
+            # DIRECT REPLY
+            # ----------------------------------------------------
+            st.divider()
+
+            with st.form(
+                f"reply_form_{message['id']}_{staff_id}",
+                clear_on_submit=True
+            ):
+                st.markdown("**↩️ Direct Reply**")
+
+                reply_subject = st.text_input(
+                    "Subject",
+                    value=(
+                        message["subject"]
+                        if message["subject"].lower().startswith("re:")
+                        else f"Re: {message['subject']}"
+                    ),
+                    key=f"reply_subject_{message['id']}_{staff_id}"
+                )
+
+                reply_text = st.text_area(
+                    f"Reply to {message['sender_name']}",
+                    placeholder="Write your reply here...",
+                    height=150,
+                    key=f"reply_text_{message['id']}_{staff_id}"
+                )
+
+                reply_files = st.file_uploader(
+                    "📎 Attach files (optional)",
+                    type=[
+                        "pdf", "doc", "docx", "xls", "xlsx",
+                        "ppt", "pptx", "csv", "txt",
+                        "jpg", "jpeg", "png", "gif", "webp", "zip"
+                    ],
+                    accept_multiple_files=True,
+                    key=f"reply_files_{message['id']}_{staff_id}",
+                    help="Maximum 5 files. Maximum 25 MB per file."
+                )
+
+                reply_send = st.form_submit_button(
+                    "↩️ Send Reply",
+                    use_container_width=True,
+                    type="primary"
+                )
+
+            if reply_send:
+                selected_reply_files = (reply_files or [])[
+                    :MAX_ATTACHMENTS_PER_MESSAGE
+                ]
+
+                oversized = [
+                    f.name for f in selected_reply_files
+                    if f.size > MAX_ATTACHMENT_SIZE
+                ]
+
+                if not reply_text.strip():
+                    st.error("Please write a reply before sending.")
+                elif oversized:
+                    st.error(
+                        "These files exceed the 25 MB limit: "
+                        + ", ".join(oversized)
+                    )
+                else:
+                    connection = get_connection()
+                    cursor = connection.cursor()
+
+                    cursor.execute(
+                        """
+                        INSERT INTO staff_messages
+                        (sender_id, recipient_id, subject, message)
+                        VALUES (?, ?, ?, ?)
+                        """,
+                        (
+                            staff_id,
+                            message["sender_id"],
+                            reply_subject.strip() or f"Re: {message['subject']}",
+                            reply_text.strip()
+                        )
+                    )
+
+                    reply_message_id = cursor.lastrowid
+                    connection.commit()
+                    connection.close()
+
+                    try:
+                        for uploaded_file in selected_reply_files:
+                            save_message_attachment(
+                                uploaded_file,
+                                reply_message_id,
+                                staff_id
+                            )
+                    except Exception as exc:
+                        st.error(
+                            f"Reply was created, but an attachment could not "
+                            f"be saved: {exc}"
+                        )
+                        return
+
+                    st.success(
+                        "✅ Reply sent successfully"
+                        + (
+                            f" with {len(selected_reply_files)} attachment(s)."
+                            if selected_reply_files else "."
+                        )
+                    )
+                    st.rerun()
 
             if message["is_read"] == 0:
 
@@ -1024,6 +1298,7 @@ def show_sent():
             st.divider()
 
             st.write(message["message"])
+            show_attachments(message["id"], staff_id)
 
 
 # ============================================================
@@ -1402,89 +1677,243 @@ def show_staff_portal():
     staff = get_current_staff()
 
     if not staff:
-
         logout()
-
         return
 
     unread = get_unread_count()
+    active_staff = get_active_staff()
 
-    st.sidebar.markdown(
-        "### 🛡️ Staff Portal"
+    # --------------------------------------------------------
+    # STAFF PORTAL HEADER
+    # --------------------------------------------------------
+    st.markdown(
+        """
+        <style>
+        .staff-portal-header {
+            padding: 18px 22px;
+            border-radius: 16px;
+            background: linear-gradient(135deg, #eef7ff, #f8fbff);
+            border: 1px solid #d8e9f5;
+            margin-bottom: 18px;
+        }
+
+        .staff-portal-title {
+            color: #086E8E;
+            font-size: 30px;
+            font-weight: 800;
+            margin-bottom: 4px;
+        }
+
+        .staff-portal-subtitle {
+            color: #5f6b76;
+            font-size: 15px;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True
     )
 
-    st.sidebar.write(
-        f"👤 **{staff['full_name']}**"
+    st.markdown(
+        f"""
+        <div class="staff-portal-header">
+            <div class="staff-portal-title">🛡️ Staff Portal</div>
+            <div class="staff-portal-subtitle">
+                Welcome, <strong>{staff['full_name']}</strong>
+                &nbsp;•&nbsp; {staff['role']}
+                &nbsp;•&nbsp; @{staff['username']}
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True
     )
 
-    st.sidebar.caption(
-        f"Role: {staff['role']}"
+    # --------------------------------------------------------
+    # STAFF STATISTICS
+    # --------------------------------------------------------
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    cursor.execute("SELECT COUNT(*) FROM staff_users")
+    total_staff = cursor.fetchone()[0]
+
+    cursor.execute(
+        "SELECT COUNT(*) FROM staff_users WHERE status = 'Active'"
     )
+    active_count = cursor.fetchone()[0]
 
-    st.sidebar.divider()
+    cursor.execute(
+        "SELECT COUNT(*) FROM staff_users WHERE status != 'Active'"
+    )
+    inactive_count = cursor.fetchone()[0]
 
-    sections = [
+    connection.close()
+
+    col1, col2, col3, col4 = st.columns(4)
+
+    with col1:
+        st.metric("👥 Total Employees", total_staff)
+
+    with col2:
+        st.metric("🟢 Active Employees", active_count)
+
+    with col3:
+        st.metric("⚪ Inactive Employees", inactive_count)
+
+    with col4:
+        st.metric("✉️ Unread Messages", unread)
+
+    st.divider()
+
+    # --------------------------------------------------------
+    # MAIN STAFF NAVIGATION
+    #
+    # We intentionally use tabs instead of another sidebar
+    # because app.py already owns the main Streamlit sidebar.
+    # --------------------------------------------------------
+    tabs = [
         "🏠 Dashboard",
-        f"📥 Inbox ({unread})",
-        "✉️ Compose Message",
-        "📤 Sent Messages",
         "👥 Staff Directory",
+        "✉️ Messages",
         "👤 My Profile"
     ]
 
     if staff["role"] == "Super Admin":
+        tabs.append("🛡️ Staff Management")
 
-        sections.append(
-            "🛡️ Staff Management"
+    selected_tab = st.tabs(tabs)
+
+    # --------------------------------------------------------
+    # DASHBOARD TAB
+    # --------------------------------------------------------
+    with selected_tab[0]:
+        st.subheader("🌍 Pan Ideate Africa Staff Dashboard")
+
+        st.info(
+            """
+            Welcome to the internal Pan Ideate Africa staff portal.
+
+            From here you can communicate with colleagues, view the
+            staff directory, manage your profile, and — if you are a
+            Super Admin — manage staff accounts.
+            """
         )
 
-    selected = st.sidebar.radio(
-        "Staff Navigation",
-        sections
-    )
+        st.subheader("⚡ Quick Actions")
 
-    st.sidebar.divider()
+        q1, q2, q3 = st.columns(3)
 
-    if st.sidebar.button(
-        "🚪 Logout",
-        use_container_width=True
-    ):
+        with q1:
+            st.markdown("### 👥")
+            st.write("**Staff Directory**")
+            st.caption(
+                f"{active_count} active employee(s) available."
+            )
 
-        logout()
+        with q2:
+            st.markdown("### ✉️")
+            st.write("**Internal Messages**")
+            if unread:
+                st.warning(
+                    f"You have {unread} unread message(s)."
+                )
+            else:
+                st.caption("Your inbox is up to date.")
 
-        return
+        with q3:
+            st.markdown("### 🔐")
+            st.write("**Your Account**")
+            st.caption(
+                f"Role: {staff['role']}"
+            )
+
+        st.divider()
+
+        st.subheader("👥 Current Active Staff")
+
+        if active_staff:
+            for employee in active_staff:
+                with st.container(border=True):
+                    c1, c2, c3 = st.columns([4, 2, 1])
+
+                    with c1:
+                        st.write(
+                            f"**{employee['full_name']}**"
+                        )
+                        st.caption(
+                            f"@{employee['username']} • "
+                            f"{employee['role']}"
+                        )
+
+                    with c2:
+                        st.write("🟢 Active")
+
+                    with c3:
+                        if employee["id"] == staff["id"]:
+                            st.caption("You")
+                        else:
+                            st.caption("Available")
+        else:
+            st.info("No active staff members found.")
 
     # --------------------------------------------------------
-    # ROUTING
+    # STAFF DIRECTORY TAB
     # --------------------------------------------------------
-
-    if selected == "🏠 Dashboard":
-
-        show_dashboard()
-
-    elif selected.startswith("📥 Inbox"):
-
-        show_inbox()
-
-    elif selected == "✉️ Compose Message":
-
-        compose_message()
-
-    elif selected == "📤 Sent Messages":
-
-        show_sent()
-
-    elif selected == "👥 Staff Directory":
-
+    with selected_tab[1]:
         show_staff_directory()
 
-    elif selected == "👤 My Profile":
+    # --------------------------------------------------------
+    # MESSAGES TAB
+    # --------------------------------------------------------
+    with selected_tab[2]:
+        st.subheader("✉️ Internal Staff Messages")
+        st.info(
+            "🔒 Private messaging: you can only see messages sent to you or messages you sent. "
+            "Attachments are also restricted to the sender and recipient."
+        )
 
+        inbox_tab, compose_tab, sent_tab = st.tabs(
+            [
+                f"📥 Inbox ({unread})",
+                "📝 Compose Message",
+                "📤 Sent Messages"
+            ]
+        )
+
+        with inbox_tab:
+            show_inbox()
+
+        with compose_tab:
+            compose_message()
+
+        with sent_tab:
+            show_sent()
+
+    # --------------------------------------------------------
+    # PROFILE TAB
+    # --------------------------------------------------------
+    with selected_tab[3]:
         show_profile()
 
-    elif selected == "🛡️ Staff Management":
+    # --------------------------------------------------------
+    # SUPER ADMIN STAFF MANAGEMENT TAB
+    # --------------------------------------------------------
+    if staff["role"] == "Super Admin":
+        with selected_tab[4]:
+            show_staff_management()
 
-        show_staff_management()
+    # --------------------------------------------------------
+    # LOGOUT
+    # --------------------------------------------------------
+    st.divider()
+
+    logout_col1, logout_col2, logout_col3 = st.columns([3, 2, 3])
+
+    with logout_col2:
+        if st.button(
+            "🚪 Logout",
+            use_container_width=True
+        ):
+            logout()
 
 
 # ============================================================

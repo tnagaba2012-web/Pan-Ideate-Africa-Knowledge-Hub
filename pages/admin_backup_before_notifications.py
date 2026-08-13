@@ -18,10 +18,6 @@ from utils.database import (
     get_unread_staff_count,
 )
 from pages.admin_staff_messaging import show_admin_staff_messages
-from pages.notification_centre import (
-    show_notification_centre,
-    get_notification_count,
-)
 
 # ============================================================
 # PAN IDEATE AFRICA
@@ -113,7 +109,6 @@ def show_admin():
             "👥 Staff Management",
             "💬 Staff Communications",
             "✉️ Staff Messages",
-            "🔔 Notification Centre",
             "💡 Innovation Ideas",
             "🎓 Learning Centre",
             "📚 Knowledge Hub",
@@ -1279,33 +1274,6 @@ def show_admin():
 
     elif admin_option == "✉️ Staff Messages":
         show_admin_staff_messages()
-
-    # ========================================================
-    # NOTIFICATION CENTRE
-    # ========================================================
-
-    elif admin_option == "🔔 Notification Centre":
-        admin_staff_id = None
-
-        connection = get_connection()
-        row = connection.execute("""
-            SELECT id
-            FROM staff_users
-            WHERE LOWER(username) = 'admin'
-              AND status = 'Active'
-            LIMIT 1
-        """).fetchone()
-        connection.close()
-
-        if row:
-            admin_staff_id = row["id"]
-
-        if admin_staff_id:
-            show_notification_centre(admin_staff_id)
-        else:
-            st.error(
-                "The active Super Admin staff account could not be found."
-            )
 
     # ========================================================
     # STAFF COMMUNICATIONS
