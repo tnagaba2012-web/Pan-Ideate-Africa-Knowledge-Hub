@@ -17,7 +17,7 @@ from utils.database import (
     get_staff_sent_messages,
     get_unread_staff_count,
 )
-
+from pages.admin_staff_messaging import show_admin_staff_messages
 
 # ============================================================
 # PAN IDEATE AFRICA
@@ -108,6 +108,7 @@ def show_admin():
             "❤️ Donation Requests",
             "👥 Staff Management",
             "💬 Staff Communications",
+            "✉️ Staff Messages",
             "💡 Innovation Ideas",
             "🎓 Learning Centre",
             "📚 Knowledge Hub",
@@ -1038,7 +1039,8 @@ def show_admin():
                 "➕ Add Staff Member"
             ]
         )
-
+    elif admin_option == "✉️ Staff Messages":
+        show_admin_staff_messages()
         # ----------------------------------------------------
         # DIRECTORY
         # ----------------------------------------------------

@@ -184,24 +184,11 @@ def init_database():
             mime_type TEXT,
             file_size INTEGER NOT NULL,
             uploaded_by INTEGER NOT NULL,
-            file_data BLOB,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY(message_id) REFERENCES staff_messages(id),
             FOREIGN KEY(uploaded_by) REFERENCES staff_users(id)
         )
     """)
-
-    # --------------------------------------------------------
-    # ATTACHMENT STORAGE MIGRATION
-    # --------------------------------------------------------
-    cursor.execute("PRAGMA table_info(staff_message_attachments)")
-    attachment_columns = {row["name"] for row in cursor.fetchall()}
-
-    if "file_data" not in attachment_columns:
-        cursor.execute(
-            "ALTER TABLE staff_message_attachments "
-            "ADD COLUMN file_data BLOB"
-        )
 
     connection.commit()
     connection.close()
@@ -768,53 +755,58 @@ def show_profile():
 # ============================================================
 
 def save_message_attachment(uploaded_file, message_id, uploaded_by):
-    """Save an attachment in the database and keep a local fallback copy."""
+    """Save an uploaded file with a private generated filename."""
     if uploaded_file is None:
         return None
 
     data = uploaded_file.getvalue()
     if len(data) > MAX_ATTACHMENT_SIZE:
-        raise ValueError(f"{uploaded_file.name} is larger than 25 MB.")
+        raise ValueError(
+            f"{uploaded_file.name} is larger than 25 MB."
+        )
 
     safe_suffix = Path(uploaded_file.name).suffix.lower()
     stored_name = f"{uuid.uuid4().hex}{safe_suffix}"
-    (ATTACHMENTS_DIR / stored_name).write_bytes(data)
+    destination = ATTACHMENTS_DIR / stored_name
+    destination.write_bytes(data)
 
-    mime_type = (
-        uploaded_file.type
-        or mimetypes.guess_type(uploaded_file.name)[0]
-        or "application/octet-stream"
-    )
+    mime_type = uploaded_file.type or mimetypes.guess_type(
+        uploaded_file.name
+    )[0] or "application/octet-stream"
 
     connection = get_connection()
     cursor = connection.cursor()
     cursor.execute(
         """
         INSERT INTO staff_message_attachments
-        (message_id, original_name, stored_name, mime_type, file_size, uploaded_by, file_data)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        (message_id, original_name, stored_name, mime_type, file_size, uploaded_by)
+        VALUES (?, ?, ?, ?, ?, ?)
         """,
-        (message_id, uploaded_file.name, stored_name, mime_type, len(data), uploaded_by, sqlite3.Binary(data))
+        (
+            message_id,
+            uploaded_file.name,
+            stored_name,
+            mime_type,
+            len(data),
+            uploaded_by
+        )
     )
     connection.commit()
     connection.close()
     return stored_name
 
 
-def get_message_attachments(message_id, staff_id):
-    """Return attachments only for the sender or recipient of the message."""
+def get_message_attachments(message_id):
     connection = get_connection()
     cursor = connection.cursor()
     cursor.execute(
         """
-        SELECT a.id, a.original_name, a.stored_name, a.mime_type, a.file_size, a.file_data
-        FROM staff_message_attachments AS a
-        JOIN staff_messages AS m ON a.message_id = m.id
-        WHERE a.message_id = ?
-          AND (m.sender_id = ? OR m.recipient_id = ?)
-        ORDER BY a.id
+        SELECT id, original_name, stored_name, mime_type, file_size
+        FROM staff_message_attachments
+        WHERE message_id = ?
+        ORDER BY id
         """,
-        (message_id, staff_id, staff_id)
+        (message_id,)
     )
     rows = cursor.fetchall()
     connection.close()
@@ -829,33 +821,29 @@ def format_file_size(size):
     return f"{size / (1024 * 1024):.1f} MB"
 
 
-def show_attachments(message_id, staff_id):
-    """Show authorized attachments, using database data first."""
-    attachments = get_message_attachments(message_id, staff_id)
+def show_attachments(message_id):
+    attachments = get_message_attachments(message_id)
     if not attachments:
         return
 
     st.markdown("**📎 Attachments**")
     for attachment in attachments:
-        data = attachment["file_data"]
-
-        # Compatibility with attachments created by the previous version.
-        if data is None:
-            path = ATTACHMENTS_DIR / attachment["stored_name"]
-            if path.exists():
-                data = path.read_bytes()
-
-        if data is None:
-            st.warning(f"Attachment unavailable: {attachment['original_name']}")
+        path = ATTACHMENTS_DIR / attachment["stored_name"]
+        if not path.exists():
+            st.warning(
+                f"Attachment unavailable: {attachment['original_name']}"
+            )
             continue
-
+        data = path.read_bytes()
         st.download_button(
-            label=(f"📎 {attachment['original_name']} "
-                   f"({format_file_size(attachment['file_size'])})"),
-            data=bytes(data),
+            label=(
+                f"📎 {attachment['original_name']} "
+                f"({format_file_size(attachment['file_size'])})"
+            ),
+            data=data,
             file_name=attachment["original_name"],
             mime=attachment["mime_type"] or "application/octet-stream",
-            key=f"download_attachment_{attachment['id']}_{staff_id}",
+            key=f"download_attachment_{attachment['id']}",
             use_container_width=True
         )
 
@@ -1090,115 +1078,7 @@ def show_inbox():
             st.divider()
 
             st.write(message["message"])
-            show_attachments(message["id"], staff_id)
-
-            # ----------------------------------------------------
-            # DIRECT REPLY
-            # ----------------------------------------------------
-            st.divider()
-
-            with st.form(
-                f"reply_form_{message['id']}_{staff_id}",
-                clear_on_submit=True
-            ):
-                st.markdown("**↩️ Direct Reply**")
-
-                reply_subject = st.text_input(
-                    "Subject",
-                    value=(
-                        message["subject"]
-                        if message["subject"].lower().startswith("re:")
-                        else f"Re: {message['subject']}"
-                    ),
-                    key=f"reply_subject_{message['id']}_{staff_id}"
-                )
-
-                reply_text = st.text_area(
-                    f"Reply to {message['sender_name']}",
-                    placeholder="Write your reply here...",
-                    height=150,
-                    key=f"reply_text_{message['id']}_{staff_id}"
-                )
-
-                reply_files = st.file_uploader(
-                    "📎 Attach files (optional)",
-                    type=[
-                        "pdf", "doc", "docx", "xls", "xlsx",
-                        "ppt", "pptx", "csv", "txt",
-                        "jpg", "jpeg", "png", "gif", "webp", "zip"
-                    ],
-                    accept_multiple_files=True,
-                    key=f"reply_files_{message['id']}_{staff_id}",
-                    help="Maximum 5 files. Maximum 25 MB per file."
-                )
-
-                reply_send = st.form_submit_button(
-                    "↩️ Send Reply",
-                    use_container_width=True,
-                    type="primary"
-                )
-
-            if reply_send:
-                selected_reply_files = (reply_files or [])[
-                    :MAX_ATTACHMENTS_PER_MESSAGE
-                ]
-
-                oversized = [
-                    f.name for f in selected_reply_files
-                    if f.size > MAX_ATTACHMENT_SIZE
-                ]
-
-                if not reply_text.strip():
-                    st.error("Please write a reply before sending.")
-                elif oversized:
-                    st.error(
-                        "These files exceed the 25 MB limit: "
-                        + ", ".join(oversized)
-                    )
-                else:
-                    connection = get_connection()
-                    cursor = connection.cursor()
-
-                    cursor.execute(
-                        """
-                        INSERT INTO staff_messages
-                        (sender_id, recipient_id, subject, message)
-                        VALUES (?, ?, ?, ?)
-                        """,
-                        (
-                            staff_id,
-                            message["sender_id"],
-                            reply_subject.strip() or f"Re: {message['subject']}",
-                            reply_text.strip()
-                        )
-                    )
-
-                    reply_message_id = cursor.lastrowid
-                    connection.commit()
-                    connection.close()
-
-                    try:
-                        for uploaded_file in selected_reply_files:
-                            save_message_attachment(
-                                uploaded_file,
-                                reply_message_id,
-                                staff_id
-                            )
-                    except Exception as exc:
-                        st.error(
-                            f"Reply was created, but an attachment could not "
-                            f"be saved: {exc}"
-                        )
-                        return
-
-                    st.success(
-                        "✅ Reply sent successfully"
-                        + (
-                            f" with {len(selected_reply_files)} attachment(s)."
-                            if selected_reply_files else "."
-                        )
-                    )
-                    st.rerun()
+            show_attachments(message["id"])
 
             if message["is_read"] == 0:
 
@@ -1298,7 +1178,7 @@ def show_sent():
             st.divider()
 
             st.write(message["message"])
-            show_attachments(message["id"], staff_id)
+            show_attachments(message["id"])
 
 
 # ============================================================
