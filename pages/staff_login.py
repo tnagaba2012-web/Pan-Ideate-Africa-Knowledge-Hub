@@ -3,7 +3,6 @@ from pages.notification_centre import (
     show_notification_centre,
     get_notification_count,
 )
-from pages.task_manager import show_staff_task_manager
 import sqlite3
 import hashlib
 import secrets
@@ -1800,8 +1799,8 @@ def show_staff_portal():
             """
             Welcome to the internal Pan Ideate Africa staff portal.
 
-            From here you can manage your assigned tasks, communicate with colleagues,
-            view the staff directory, manage your profile, and — if you are a
+            From here you can communicate with colleagues, view the
+            staff directory, manage your profile, and — if you are a
             Super Admin — manage staff accounts.
             """
         )
@@ -1870,21 +1869,15 @@ def show_staff_portal():
         show_notification_centre(staff["id"])
 
     # --------------------------------------------------------
-    # MY TASKS TAB
-    # --------------------------------------------------------
-    with selected_tab[2]:
-        show_staff_task_manager(staff["id"], staff["role"])
-
-    # --------------------------------------------------------
     # STAFF DIRECTORY TAB
     # --------------------------------------------------------
-    with selected_tab[3]:
+    with selected_tab[2]:
         show_staff_directory()
 
     # --------------------------------------------------------
     # MESSAGES TAB
     # --------------------------------------------------------
-    with selected_tab[4]:
+    with selected_tab[3]:
         st.subheader("✉️ Internal Staff Messages")
         st.info(
             "🔒 Private messaging: you can only see messages sent to you or messages you sent. "
@@ -1911,15 +1904,22 @@ def show_staff_portal():
     # --------------------------------------------------------
     # PROFILE TAB
     # --------------------------------------------------------
-    with selected_tab[5]:
+    with selected_tab[4]:
         show_profile()
 
     # --------------------------------------------------------
     # SUPER ADMIN STAFF MANAGEMENT TAB
     # --------------------------------------------------------
+    # --------------------------------------------------------
+    # SUPER ADMIN STAFF MANAGEMENT TAB
+    # --------------------------------------------------------
+    # The tab is appended only for Super Admin accounts. Use a
+    # length check as a safety guard so a tab-index problem can
+    # never crash the entire Staff Portal.
     if staff["role"] == "Super Admin":
-        with selected_tab[6]:
-            show_staff_management()
+        if len(selected_tab) > 5:
+            with selected_tab[5]:
+                show_staff_management()
 
     # --------------------------------------------------------
     # LOGOUT
