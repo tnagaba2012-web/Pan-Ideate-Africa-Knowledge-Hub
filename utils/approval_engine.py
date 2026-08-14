@@ -663,3 +663,83 @@ def has_any_configured_approval_authority(staff_id):
         and profile["status"] == "Active"
         and profile["can_access"]
     )
+
+def visible_requests_for_user(staff_id):
+    """
+    Return the pending requests this user is authorized to see.
+
+    Super Admin sees every pending request.
+    Other approvers see only requests routed to the lowest eligible
+    authority level for their department and thresholds.
+    """
+    person = get_staff(staff_id)
+    if not person or person["status"] != "Active":
+        return []
+
+    requests = get_pending_requests()
+
+    if person["role"] == "Super Admin":
+        for request in requests:
+            request["routing"] = routing_for_request(request)
+        return requests
+
+    visible = []
+
+    for request in requests:
+        routing = routing_for_request(request)
+
+        candidate_ids = set()
+        for candidate in routing["candidates"]:
+            candidate_id = (
+                candidate["staff_id"]
+                if "staff_id" in candidate.keys()
+                else candidate["id"]
+            )
+            candidate_ids.add(int(candidate_id))
+
+        if int(staff_id) in candidate_ids:
+            request["routing"] = routing
+            visible.append(request)
+
+    return visible
+
+
+def decision_history(staff_id, all_history=False):
+    """
+    Return approval decisions.
+
+    Super Admin can request organization-wide history.
+    Other users see only decisions they personally made.
+    """
+    if all_history and not is_super_admin(staff_id):
+        all_history = False
+
+    con = db()
+
+    query = """
+        SELECT
+            a.*,
+            requester.full_name AS requester_name,
+            approver.full_name AS approver_name,
+            approver.role AS approver_role
+        FROM approval_actions a
+        LEFT JOIN staff_users requester
+            ON requester.id = a.requester_id
+        LEFT JOIN staff_users approver
+            ON approver.id = a.approver_id
+    """
+
+    params = []
+
+    if not all_history:
+        query += " WHERE a.approver_id = ?"
+        params.append(staff_id)
+
+    query += """
+        ORDER BY a.acted_at DESC, a.id DESC
+        LIMIT 500
+    """
+
+    rows = con.execute(query, params).fetchall()
+    con.close()
+    return rows
