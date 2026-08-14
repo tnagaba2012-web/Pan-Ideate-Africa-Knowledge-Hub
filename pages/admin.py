@@ -23,6 +23,7 @@ from pages.notification_centre import (
     get_notification_count,
 )
 from pages.task_manager import show_admin_task_manager
+from pages.document_centre import show_admin_document_centre
 
 # ============================================================
 # PAN IDEATE AFRICA
@@ -116,6 +117,7 @@ def show_admin():
             "💬 Staff Communications",
             "✉️ Staff Messages",
             "🔔 Notification Centre",
+            "📁 Document Centre",
             "💡 Innovation Ideas",
             "🎓 Learning Centre",
             "📚 Knowledge Hub",
@@ -1335,6 +1337,33 @@ def show_admin():
     # ========================================================
     # STAFF COMMUNICATIONS
     # ========================================================
+
+    # ========================================================
+    # DOCUMENT CENTRE
+    # ========================================================
+
+    elif admin_option == "📁 Document Centre":
+        admin_staff_id = None
+
+        connection = get_connection()
+        row = connection.execute("""
+            SELECT id
+            FROM staff_users
+            WHERE LOWER(username) = 'admin'
+              AND status = 'Active'
+            LIMIT 1
+        """).fetchone()
+        connection.close()
+
+        if row:
+            admin_staff_id = row["id"]
+
+        if admin_staff_id:
+            show_admin_document_centre(admin_staff_id)
+        else:
+            st.error(
+                "The active Super Admin staff account could not be found."
+            )
 
     elif admin_option == "💬 Staff Communications":
         st.subheader("💬 Staff Communications")
