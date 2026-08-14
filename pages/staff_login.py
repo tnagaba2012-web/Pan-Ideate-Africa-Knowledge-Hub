@@ -1781,7 +1781,7 @@ def show_staff_portal():
         f"🔔 Notifications ({notification_count})",
         "👥 Staff Directory",
         "✉️ Messages",
-        "👤 My Profile"
+        "👤 My Profile",
         "📁 Documents"
     ]   
 
@@ -1923,8 +1923,8 @@ def show_staff_portal():
     # length check as a safety guard so a tab-index problem can
     # never crash the entire Staff Portal.
     if staff["role"] == "Super Admin":
-        if len(selected_tab) > 5:
-            with selected_tab[5]:
+        if len(selected_tab) > 6:
+            with selected_tab[6]:
                 show_staff_management()
 
     # --------------------------------------------------------
