@@ -50,6 +50,7 @@ DATA_DIR = BASE_DIR / "data"
 DB_PATH = DATA_DIR / "pan_ideate.db"
 
 ADMIN_ROLES = {"Super Admin", "Administrator", "Manager"}
+DEPARTMENT_MEETING_ADMIN_ROLES = {"Super Admin", "Administrator"}
 
 
 # ============================================================
@@ -84,6 +85,28 @@ def init_database():
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS meeting_permissions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            staff_id INTEGER NOT NULL UNIQUE,
+            department TEXT NOT NULL,
+            can_organize INTEGER NOT NULL DEFAULT 0,
+            updated_by INTEGER,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+    # V1 databases may not yet have department/audit fields.
+    for column, definition in [
+        ("department", "TEXT"),
+        ("created_by", "INTEGER"),
+        ("meeting_scope", "TEXT NOT NULL DEFAULT 'Department'"),
+    ]:
+        try:
+            cur.execute(f"ALTER TABLE meetings ADD COLUMN {column} {definition}")
+        except sqlite3.OperationalError:
+            pass
 
     cur.execute("""
         CREATE TABLE IF NOT EXISTS meeting_participants (
@@ -201,11 +224,59 @@ def staff_label(person):
     return f"{person['full_name']} — {person['role']}"
 
 
+def get_meeting_permission(staff_id):
+    con = db()
+    row = con.execute("""
+        SELECT staff_id, department, can_organize
+        FROM meeting_permissions
+        WHERE staff_id=?
+        LIMIT 1
+    """, (staff_id,)).fetchone()
+    con.close()
+    return row
+
+
+def can_organize_department_meeting(staff_id, department):
+    person = get_staff(staff_id)
+    if not person or person["status"] != "Active":
+        return False, "Active staff account required."
+
+    if person["role"] in DEPARTMENT_MEETING_ADMIN_ROLES:
+        return True, "Administrator permission granted."
+
+    permission = get_meeting_permission(staff_id)
+    if not permission or not permission["can_organize"]:
+        return False, "You have not been authorized to organize department meetings."
+
+    assigned = (permission["department"] or "").strip()
+    requested = (department or "").strip()
+    if not assigned or assigned.casefold() != requested.casefold():
+        return False, "You may only organize meetings for your authorized department."
+
+    return True, "Department meeting permission granted."
+
+
+def get_authorized_participants(staff_id, department):
+    person = get_staff(staff_id)
+    people = get_active_staff()
+    if not person:
+        return []
+    if person["role"] in DEPARTMENT_MEETING_ADMIN_ROLES:
+        return people
+
+    permission = get_meeting_permission(staff_id)
+    if not permission or not permission["can_organize"]:
+        return []
+
+    # Current staff_users V1 has no department column. Until the Staff
+    # Directory gets the department field, an authorized department
+    # organizer can invite staff explicitly selected by the administrator.
+    # This keeps authorization enforced without inventing department data.
+    return people
+
+
 def staff_map():
-    return {
-        staff_label(person): person["id"]
-        for person in get_active_staff()
-    }
+    return {staff_label(p): p["id"] for p in get_active_staff()}
 
 
 # ============================================================
@@ -369,96 +440,63 @@ def cancel_ai_appointments(meeting_id):
 # ============================================================
 
 def create_meeting(
-    title,
-    meeting_date,
-    start_time,
-    end_time,
-    location,
-    meeting_link,
-    organizer_id,
-    purpose,
-    agenda,
-    participant_ids,
+    title, meeting_date, start_time, end_time, location, meeting_link,
+    organizer_id, purpose, agenda, participant_ids,
+    department="", meeting_scope="Department", created_by=None,
 ):
     if not title.strip():
         return False, "Meeting title is required."
 
+    creator_id = created_by or organizer_id
+    if meeting_scope == "Department":
+        allowed, message = can_organize_department_meeting(
+            creator_id, department
+        )
+        if not allowed:
+            return False, message
+    elif get_staff(creator_id)["role"] not in DEPARTMENT_MEETING_ADMIN_ROLES:
+        return False, "Only authorized administrators can create organization-wide meetings."
+
     if not participant_ids:
         participant_ids = [organizer_id]
-
     if organizer_id not in participant_ids:
         participant_ids = [organizer_id] + participant_ids
 
     con = db()
-
     cur = con.cursor()
-
     cur.execute("""
         INSERT INTO meetings
-        (
-            title,
-            meeting_date,
-            start_time,
-            end_time,
-            location,
-            meeting_link,
-            organizer_id,
-            purpose,
-            agenda
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (title, meeting_date, start_time, end_time, location, meeting_link,
+         organizer_id, purpose, agenda, department, created_by, meeting_scope)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, (
-        title.strip(),
-        meeting_date,
-        start_time,
-        end_time,
-        location.strip(),
-        meeting_link.strip(),
-        organizer_id,
-        purpose.strip(),
-        agenda.strip(),
+        title.strip(), meeting_date, start_time, end_time, location.strip(),
+        meeting_link.strip(), organizer_id, purpose.strip(), agenda.strip(),
+        department.strip(), creator_id, meeting_scope,
     ))
-
     meeting_id = cur.lastrowid
 
     for staff_id in sorted(set(participant_ids)):
         cur.execute("""
-            INSERT OR IGNORE INTO meeting_participants
-            (meeting_id, staff_id)
+            INSERT OR IGNORE INTO meeting_participants (meeting_id, staff_id)
             VALUES (?, ?)
         """, (meeting_id, staff_id))
-
     con.commit()
     con.close()
 
-    # Connect every participant to the AI appointment engine.
     for staff_id in sorted(set(participant_ids)):
         sync_ai_appointment(
-            staff_id,
-            meeting_id,
-            title,
-            meeting_date,
-            start_time,
-            end_time,
-            location,
-            purpose,
-            organizer_id,
+            staff_id, meeting_id, title, meeting_date, start_time,
+            end_time, location, purpose, organizer_id,
         )
-
         if staff_id != organizer_id:
             notify(
-                staff_id,
-                "📅 New Meeting Invitation",
-                f"You have been added to '{title}' on "
-                f"{meeting_date} at {start_time}.",
+                staff_id, "📅 New Meeting Invitation",
+                f"You have been added to '{title}' on {meeting_date} at {start_time}.",
             )
 
-    notify(
-        organizer_id,
-        "📅 Meeting Created",
-        f"Meeting '{title}' has been created successfully.",
-    )
-
+    notify(organizer_id, "📅 Meeting Created",
+           f"Meeting '{title}' has been created successfully.")
     return True, meeting_id
 
 
@@ -895,6 +933,37 @@ def update_action_status(action_id, status, completion_note=""):
     return True, "Action item updated."
 
 
+def save_meeting_permission(staff_id, department, can_organize, updated_by):
+    if not department.strip():
+        return False, "Department name is required."
+    con = db()
+    con.execute("""
+        INSERT INTO meeting_permissions
+        (staff_id, department, can_organize, updated_by)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(staff_id) DO UPDATE SET
+            department=excluded.department,
+            can_organize=excluded.can_organize,
+            updated_by=excluded.updated_by,
+            updated_at=CURRENT_TIMESTAMP
+    """, (staff_id, department.strip(), int(can_organize), updated_by))
+    con.commit()
+    con.close()
+    return True, "Meeting permission saved."
+
+
+def get_meeting_permissions():
+    con = db()
+    rows = con.execute("""
+        SELECT mp.*, s.full_name, s.username, s.role
+        FROM meeting_permissions mp
+        JOIN staff_users s ON s.id=mp.staff_id
+        ORDER BY s.full_name
+    """).fetchall()
+    con.close()
+    return rows
+
+
 # ============================================================
 # DASHBOARD METRICS
 # ============================================================
@@ -1292,6 +1361,7 @@ def show_admin_meeting_centre(admin_id):
         "➕ Create Meeting",
         "📝 Minutes & Actions",
         "👥 Attendance",
+        "🔐 Meeting Permissions",
     ])
 
     # --------------------------------------------------------
@@ -1318,6 +1388,10 @@ def show_admin_meeting_centre(admin_id):
                 st.write(
                     f"Participants: **{meeting['participant_count']}**"
                 )
+                if meeting["meeting_scope"]:
+                    st.write(f"Scope: **{meeting['meeting_scope']}**")
+                if meeting["department"]:
+                    st.write(f"Department: **{meeting['department']}**")
 
                 if meeting["location"]:
                     st.write(
@@ -1342,109 +1416,57 @@ def show_admin_meeting_centre(admin_id):
     # CREATE MEETING
     # --------------------------------------------------------
     with tabs[1]:
+        admin_person = get_staff(admin_id)
         people = get_active_staff()
+        permission = get_meeting_permission(admin_id)
 
-        if not people:
-            st.warning(
-                "No active staff members are available."
-            )
+        if admin_person["role"] in DEPARTMENT_MEETING_ADMIN_ROLES:
+            scope = st.selectbox("Meeting Scope", ["Department", "Organization-wide"], key="meeting_scope")
+            if scope == "Department":
+                department = st.text_input("Department", placeholder="e.g. Agriculture").strip()
+            else:
+                department = "Organization-wide"
+            organizer_id = admin_id
+            organizer_display = admin_person["full_name"]
+            participant_people = people
         else:
-            people_map = {
-                staff_label(p): p["id"]
-                for p in people
-            }
+            scope = "Department"
+            department = permission["department"] if permission else ""
+            organizer_id = admin_id
+            organizer_display = admin_person["full_name"]
+            participant_people = get_authorized_participants(admin_id, department)
+            if not department or not permission or not permission["can_organize"]:
+                st.warning("You are not authorized to organize department meetings. An Administrator must grant this permission.")
+            else:
+                st.info(f"Authorized department: **{department}**")
 
-            organizer_label = st.selectbox(
-                "Meeting Organizer",
-                list(people_map.keys()),
-            )
-
-            selected_participants = st.multiselect(
-                "Participants",
-                list(people_map.keys()),
-            )
-
+        if people and (admin_person["role"] in DEPARTMENT_MEETING_ADMIN_ROLES or (permission and permission["can_organize"])):
+            people_map = {staff_label(p): p["id"] for p in participant_people if p["id"] != organizer_id}
             with st.form("create_meeting_form"):
-                title = st.text_input(
-                    "Meeting Title",
-                    placeholder="e.g. Weekly Management Meeting",
-                )
-
+                st.write(f"**Organizer:** {organizer_display}")
+                st.write(f"**Scope:** {scope} • **Department:** {department}")
+                selected_participants = st.multiselect("Participants", list(people_map.keys()))
+                title = st.text_input("Meeting Title", placeholder="e.g. Weekly Department Meeting")
                 c1, c2 = st.columns(2)
-
                 with c1:
-                    meeting_date = st.date_input(
-                        "Meeting Date",
-                        value=date.today(),
-                    )
-
+                    meeting_date = st.date_input("Meeting Date", value=date.today())
                 with c2:
-                    start_time = st.time_input(
-                        "Start Time",
-                    )
-
-                end_time = st.text_input(
-                    "Expected End Time",
-                    placeholder="e.g. 11:30",
-                )
-
-                location = st.text_input(
-                    "Location",
-                    placeholder="e.g. Pan Ideate Africa Office",
-                )
-
-                meeting_link = st.text_input(
-                    "Meeting / Video Link (optional)",
-                )
-
-                purpose = st.text_area(
-                    "Purpose",
-                    height=80,
-                )
-
-                agenda = st.text_area(
-                    "Agenda",
-                    height=140,
-                    placeholder=(
-                        "1. Opening\n"
-                        "2. Previous action points\n"
-                        "3. New matters\n"
-                        "4. Decisions\n"
-                        "5. Closing"
-                    ),
-                )
-
-                create = st.form_submit_button(
-                    "📅 Create Meeting",
-                    type="primary",
-                    use_container_width=True,
-                )
-
+                    start_time = st.time_input("Start Time")
+                end_time = st.text_input("Expected End Time", placeholder="e.g. 11:30")
+                location = st.text_input("Location")
+                meeting_link = st.text_input("Meeting / Video Link (optional)")
+                purpose = st.text_area("Purpose", height=80)
+                agenda = st.text_area("Agenda", height=140, placeholder="1. Opening\n2. Previous action points\n3. New matters\n4. Decisions\n5. Closing")
+                create = st.form_submit_button("📅 Create Meeting", type="primary", use_container_width=True)
                 if create:
-                    organizer_id = people_map[organizer_label]
-
-                    participant_ids = [
-                        people_map[label]
-                        for label in selected_participants
-                    ]
-
+                    participant_ids = [people_map[label] for label in selected_participants]
                     ok, result = create_meeting(
-                        title=title,
-                        meeting_date=meeting_date.isoformat(),
-                        start_time=start_time.strftime("%H:%M"),
-                        end_time=end_time.strip(),
-                        location=location,
-                        meeting_link=meeting_link,
-                        organizer_id=organizer_id,
-                        purpose=purpose,
-                        agenda=agenda,
-                        participant_ids=participant_ids,
+                        title, meeting_date.isoformat(), start_time.strftime("%H:%M"),
+                        end_time.strip(), location, meeting_link, organizer_id,
+                        purpose, agenda, participant_ids, department, scope, admin_id,
                     )
-
                     if ok:
-                        st.success(
-                            f"Meeting #{result} created successfully."
-                        )
+                        st.success(f"Meeting #{result} created successfully.")
                         st.rerun()
                     else:
                         st.error(result)
@@ -1719,6 +1741,39 @@ def show_admin_meeting_centre(admin_id):
                             (st.success if ok else st.error)(msg)
                             if ok:
                                 st.rerun()
+
+
+    # --------------------------------------------------------
+    # MEETING PERMISSIONS
+    # --------------------------------------------------------
+    with tabs[4]:
+        st.subheader("🔐 Department Meeting Permissions")
+        st.caption("Only authorized administrators can grant or remove department meeting-organizer access.")
+        people = get_active_staff()
+        if people:
+            people_map = {staff_label(p): p["id"] for p in people}
+            with st.form("meeting_permission_form"):
+                selected = st.selectbox("Staff Member", list(people_map.keys()))
+                department = st.text_input("Authorized Department", placeholder="e.g. Agriculture")
+                can_organize = st.checkbox("Allow this staff member to organize department meetings")
+                save = st.form_submit_button("💾 Save Meeting Permission", type="primary", use_container_width=True)
+                if save:
+                    ok, msg = save_meeting_permission(
+                        people_map[selected], department, can_organize, admin_id
+                    )
+                    (st.success if ok else st.error)(msg)
+                    if ok:
+                        st.rerun()
+
+        rows = get_meeting_permissions()
+        if rows:
+            st.divider()
+            st.subheader("Current Department Meeting Permissions")
+            for row in rows:
+                status = "✅ Authorized" if row["can_organize"] else "🚫 Not Authorized"
+                st.write(f"**{row['full_name']}** — {row['department']} — {status}")
+        else:
+            st.info("No department meeting permissions have been configured yet.")
 
 
 # ============================================================
