@@ -12,6 +12,7 @@ import uuid
 import mimetypes
 from pages.document_centre import show_document_centre
 from pages.staff_directory import show_staff as show_staff_directory_v1
+from pages.ai_staff_assistant import show_staff_ai_assistant
 
 # ============================================================
 # PAN IDEATE AFRICA
@@ -1783,7 +1784,8 @@ def show_staff_portal():
         "👥 Staff Directory",
         "✉️ Messages",
         "👤 My Profile",
-        "📁 Documents"
+        "📁 Documents",
+        "🤖 AI Staff Assistant"
     ]   
 
     if staff["role"] == "Super Admin":
@@ -1923,9 +1925,18 @@ def show_staff_portal():
     # The tab is appended only for Super Admin accounts. Use a
     # length check as a safety guard so a tab-index problem can
     # never crash the entire Staff Portal.
+    # --------------------------------------------------------
+    # AI STAFF ASSISTANT TAB
+    # --------------------------------------------------------
+    with selected_tab[6]:
+        show_staff_ai_assistant(staff["id"])
+
+    # --------------------------------------------------------
+    # SUPER ADMIN STAFF MANAGEMENT TAB
+    # --------------------------------------------------------
     if staff["role"] == "Super Admin":
-        if len(selected_tab) > 6:
-            with selected_tab[6]:
+        if len(selected_tab) > 7:
+            with selected_tab[7]:
                 show_staff_management()
 
     # --------------------------------------------------------

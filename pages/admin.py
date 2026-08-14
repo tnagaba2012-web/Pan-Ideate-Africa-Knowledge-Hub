@@ -27,6 +27,7 @@ from pages.document_centre import show_admin_document_centre
 from pages.leave_attendance import show_admin_leave_attendance
 from pages.staff_directory import show_admin_staff_directory
 from pages.staff_login import init_database as init_staff_database, create_initial_admin
+from pages.ai_staff_assistant import show_admin_ai_staff_assistant
 
 # ============================================================
 # PAN IDEATE AFRICA
@@ -122,6 +123,7 @@ def show_admin():
             "💬 Staff Communications",
             "✉️ Staff Messages",
             "🔔 Notification Centre",
+            "🤖 AI Staff Assistant",
             "📁 Document Centre",
             "💡 Innovation Ideas",
             "🎓 Learning Centre",
@@ -1404,6 +1406,33 @@ def show_admin():
     # ========================================================
     # DOCUMENT CENTRE
     # ========================================================
+
+    # ========================================================
+    # AI STAFF ASSISTANT
+    # ========================================================
+
+    elif admin_option == "🤖 AI Staff Assistant":
+        admin_staff_id = None
+
+        connection = get_connection()
+        row = connection.execute("""
+            SELECT id
+            FROM staff_users
+            WHERE LOWER(username) = 'admin'
+              AND status = 'Active'
+            LIMIT 1
+        """).fetchone()
+        connection.close()
+
+        if row:
+            admin_staff_id = row["id"]
+
+        if admin_staff_id:
+            show_admin_ai_staff_assistant(admin_staff_id)
+        else:
+            st.error(
+                "The active Super Admin staff account could not be found."
+            )
 
     elif admin_option == "📁 Document Centre":
         admin_staff_id = None
