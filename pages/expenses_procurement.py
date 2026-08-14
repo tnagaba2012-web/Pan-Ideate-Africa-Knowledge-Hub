@@ -399,8 +399,18 @@ def expense_claims(staff_id=None, status=None):
 
 
 def review_expense(claim_id, admin_id, decision, note=""):
-    if not is_approver(admin_id):
-        return False, "You are not authorized to review expense claims."
+    from utils.approval_engine import (
+        can_review_request,
+        record_approval_decision,
+    )
+
+    allowed, message = can_review_request(
+        admin_id,
+        "expense",
+        claim_id,
+    )
+    if not allowed:
+        return False, message
 
     if decision not in {"Approved", "Rejected"}:
         return False, "Invalid decision."
@@ -462,6 +472,15 @@ def review_expense(claim_id, admin_id, decision, note=""):
         priority="normal" if decision == "Approved" else "high",
         related_id=claim_id,
         related_type="expense_claim",
+    )
+
+    record_approval_decision(
+        "expense",
+        claim_id,
+        claim["staff_id"],
+        admin_id,
+        decision,
+        note,
     )
 
     return True, f"Expense claim {decision.lower()}."
@@ -599,8 +618,18 @@ def review_purchase_request(
     decision,
     note="",
 ):
-    if not is_approver(admin_id):
-        return False, "You are not authorized to review purchase requests."
+    from utils.approval_engine import (
+        can_review_request,
+        record_approval_decision,
+    )
+
+    allowed, message = can_review_request(
+        admin_id,
+        "procurement",
+        request_id,
+    )
+    if not allowed:
+        return False, message
 
     if decision not in {"Approved", "Rejected"}:
         return False, "Invalid decision."
@@ -664,6 +693,15 @@ def review_purchase_request(
         priority="normal" if decision == "Approved" else "high",
         related_id=request_id,
         related_type="purchase_request",
+    )
+
+    record_approval_decision(
+        "procurement",
+        request_id,
+        request["staff_id"],
+        admin_id,
+        decision,
+        note,
     )
 
     return True, f"Purchase request {decision.lower()}."

@@ -452,8 +452,18 @@ def sign_out(staff_id, authorized=False, actor_id=None):
 
 
 def review_early_signout(attendance_id, admin_id, decision, note=""):
-    if not is_approver(admin_id):
-        return False, "You are not authorized to review early sign-outs."
+    from utils.approval_engine import (
+        can_review_request,
+        record_approval_decision,
+    )
+
+    allowed, message = can_review_request(
+        admin_id,
+        "early_signout",
+        attendance_id,
+    )
+    if not allowed:
+        return False, message
     if decision not in {"Approved", "Rejected"}:
         return False, "Invalid decision."
 
@@ -500,6 +510,15 @@ def review_early_signout(attendance_id, admin_id, decision, note=""):
         priority="normal" if decision == "Approved" else "high",
         related_id=attendance_id, related_type="early_signout"
     )
+    record_approval_decision(
+        "early_signout",
+        attendance_id,
+        record["staff_id"],
+        admin_id,
+        decision,
+        note,
+    )
+
     return True, f"Early sign-out {decision.lower()}."
 
 
@@ -594,8 +613,18 @@ def leave_requests(staff_id=None, status=None):
 
 
 def review_leave(request_id, admin_id, decision, note=""):
-    if not is_approver(admin_id):
-        return False, "You are not authorized to review leave."
+    from utils.approval_engine import (
+        can_review_request,
+        record_approval_decision,
+    )
+
+    allowed, message = can_review_request(
+        admin_id,
+        "leave",
+        request_id,
+    )
+    if not allowed:
+        return False, message
     if decision not in {"Approved", "Rejected"}:
         return False, "Invalid decision."
 
@@ -645,6 +674,15 @@ def review_leave(request_id, admin_id, decision, note=""):
         priority="normal" if decision == "Approved" else "high",
         related_id=request_id, related_type="leave_request"
     )
+    record_approval_decision(
+        "leave",
+        request_id,
+        request["staff_id"],
+        admin_id,
+        decision,
+        note,
+    )
+
     return True, f"Leave request {decision.lower()}."
 
 

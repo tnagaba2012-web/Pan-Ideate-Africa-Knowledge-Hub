@@ -14,6 +14,8 @@ from pages.document_centre import show_document_centre
 from pages.staff_directory import show_staff as show_staff_directory_v1
 from pages.ai_staff_assistant import show_staff_ai_assistant
 from pages.meeting_centre import show_staff_meeting_centre
+from pages.approval_centre import show_staff_approval_centre
+from utils.approval_engine import has_approval_access
 
 # ============================================================
 # PAN IDEATE AFRICA
@@ -1778,6 +1780,7 @@ def show_staff_portal():
     # because app.py already owns the main Streamlit sidebar.
     # --------------------------------------------------------
     notification_count = get_notification_count(staff["id"])
+    approval_access = has_approval_access(staff["id"])
 
     tabs = [
         "🏠 Dashboard",
@@ -1787,18 +1790,32 @@ def show_staff_portal():
         "👤 My Profile",
         "📁 Documents",
         "🤖 AI Staff Assistant",
-        "📅 Meeting Centre"
-    ]   
+        "📅 Meeting Centre",
+    ]
+
+    if approval_access:
+        tabs.append("✅ Approval Centre")
 
     if staff["role"] == "Super Admin":
         tabs.append("🛡️ Staff Management")
 
     selected_tab = st.tabs(tabs)
 
+    tab_indices = {
+        label: index
+        for index, label in enumerate(tabs)
+    }
+
+    notification_tab = next(
+        label
+        for label in tabs
+        if label.startswith("🔔 Notifications")
+    )
+
     # --------------------------------------------------------
     # DASHBOARD TAB
     # --------------------------------------------------------
-    with selected_tab[0]:
+    with selected_tab[tab_indices["🏠 Dashboard"]]:
         st.subheader("🌍 Pan Ideate Africa Staff Dashboard")
 
         st.info(
@@ -1871,19 +1888,19 @@ def show_staff_portal():
     # --------------------------------------------------------
     # STAFF DIRECTORY TAB
     # --------------------------------------------------------
-    with selected_tab[1]:
+    with selected_tab[tab_indices[notification_tab]]:
         show_notification_centre(staff["id"])
 
     # --------------------------------------------------------
     # STAFF DIRECTORY TAB
     # --------------------------------------------------------
-    with selected_tab[2]:
+    with selected_tab[tab_indices["👥 Staff Directory"]]:
         show_staff_directory_v1(staff["id"])
 
     # --------------------------------------------------------
     # MESSAGES TAB
     # --------------------------------------------------------
-    with selected_tab[3]:
+    with selected_tab[tab_indices["✉️ Messages"]]:
         st.subheader("✉️ Internal Staff Messages")
         st.info(
             "🔒 Private messaging: you can only see messages sent to you or messages you sent. "
@@ -1910,42 +1927,39 @@ def show_staff_portal():
     # --------------------------------------------------------
     # PROFILE TAB
     # --------------------------------------------------------
-    with selected_tab[4]:
+    with selected_tab[tab_indices["👤 My Profile"]]:
         show_profile()
     # --------------------------------------------------------
 # DOCUMENT CENTRE
 # --------------------------------------------------------
-    with selected_tab[5]:
+    with selected_tab[tab_indices["📁 Documents"]]:
         show_document_centre(staff["id"])
 
     # --------------------------------------------------------
-    # SUPER ADMIN STAFF MANAGEMENT TAB
-    # --------------------------------------------------------
-    # --------------------------------------------------------
-    # SUPER ADMIN STAFF MANAGEMENT TAB
-    # --------------------------------------------------------
-    # The tab is appended only for Super Admin accounts. Use a
-    # length check as a safety guard so a tab-index problem can
-    # never crash the entire Staff Portal.
-    # --------------------------------------------------------
     # AI STAFF ASSISTANT TAB
     # --------------------------------------------------------
-    with selected_tab[6]:
+    with selected_tab[tab_indices["🤖 AI Staff Assistant"]]:
         show_staff_ai_assistant(staff["id"])
 
     # --------------------------------------------------------
     # MEETING CENTRE TAB
     # --------------------------------------------------------
-    with selected_tab[7]:
+    with selected_tab[tab_indices["📅 Meeting Centre"]]:
         show_staff_meeting_centre(staff["id"])
+
+    # --------------------------------------------------------
+    # APPROVAL CENTRE TAB
+    # --------------------------------------------------------
+    if approval_access:
+        with selected_tab[tab_indices["✅ Approval Centre"]]:
+            show_staff_approval_centre(staff["id"])
 
     # --------------------------------------------------------
     # SUPER ADMIN STAFF MANAGEMENT TAB
     # --------------------------------------------------------
     if staff["role"] == "Super Admin":
-        if len(selected_tab) > 8:
-            with selected_tab[8]:
-                show_staff_management()
+        with selected_tab[tab_indices["🛡️ Staff Management"]]:
+            show_staff_management()
 
     # --------------------------------------------------------
     # LOGOUT
