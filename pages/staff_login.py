@@ -11,8 +11,7 @@ from datetime import datetime
 import uuid
 import mimetypes
 from pages.document_centre import show_document_centre
-from pages.leave_attendance import show_staff_attendance
-from pages.expenses_procurement import show_staff_expenses_procurement
+from pages.staff_directory import show_staff as show_staff_directory_v1
 
 # ============================================================
 # PAN IDEATE AFRICA
@@ -1784,9 +1783,7 @@ def show_staff_portal():
         "👥 Staff Directory",
         "✉️ Messages",
         "👤 My Profile",
-        "📁 Documents",
-        "🕘 Leave & Attendance",
-        "💰 Expenses & Procurement"
+        "📁 Documents"
     ]   
 
     if staff["role"] == "Super Admin":
@@ -1877,7 +1874,7 @@ def show_staff_portal():
     # STAFF DIRECTORY TAB
     # --------------------------------------------------------
     with selected_tab[2]:
-        show_staff_directory()
+        show_staff_directory_v1(staff["id"])
 
     # --------------------------------------------------------
     # MESSAGES TAB
@@ -1918,23 +1915,17 @@ def show_staff_portal():
         show_document_centre(staff["id"])
 
     # --------------------------------------------------------
-    # LEAVE & ATTENDANCE TAB
+    # SUPER ADMIN STAFF MANAGEMENT TAB
     # --------------------------------------------------------
-    with selected_tab[6]:
-        show_staff_attendance(staff["id"])
-
-    # --------------------------------------------------------
-    # EXPENSES & PROCUREMENT TAB
-    # --------------------------------------------------------
-    with selected_tab[7]:
-        show_staff_expenses_procurement(staff["id"])
-
     # --------------------------------------------------------
     # SUPER ADMIN STAFF MANAGEMENT TAB
     # --------------------------------------------------------
+    # The tab is appended only for Super Admin accounts. Use a
+    # length check as a safety guard so a tab-index problem can
+    # never crash the entire Staff Portal.
     if staff["role"] == "Super Admin":
-        if len(selected_tab) > 8:
-            with selected_tab[8]:
+        if len(selected_tab) > 6:
+            with selected_tab[6]:
                 show_staff_management()
 
     # --------------------------------------------------------
