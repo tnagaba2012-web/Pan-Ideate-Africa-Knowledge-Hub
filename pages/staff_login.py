@@ -13,6 +13,7 @@ import mimetypes
 from pages.document_centre import show_document_centre
 from pages.staff_directory import show_staff as show_staff_directory_v1
 from pages.ai_staff_assistant import show_staff_ai_assistant
+from pages.meeting_centre import show_staff_meeting_centre
 
 # ============================================================
 # PAN IDEATE AFRICA
@@ -1785,7 +1786,8 @@ def show_staff_portal():
         "✉️ Messages",
         "👤 My Profile",
         "📁 Documents",
-        "🤖 AI Staff Assistant"
+        "🤖 AI Staff Assistant",
+        "📅 Meeting Centre"
     ]   
 
     if staff["role"] == "Super Admin":
@@ -1932,11 +1934,17 @@ def show_staff_portal():
         show_staff_ai_assistant(staff["id"])
 
     # --------------------------------------------------------
+    # MEETING CENTRE TAB
+    # --------------------------------------------------------
+    with selected_tab[7]:
+        show_staff_meeting_centre(staff["id"])
+
+    # --------------------------------------------------------
     # SUPER ADMIN STAFF MANAGEMENT TAB
     # --------------------------------------------------------
     if staff["role"] == "Super Admin":
-        if len(selected_tab) > 7:
-            with selected_tab[7]:
+        if len(selected_tab) > 8:
+            with selected_tab[8]:
                 show_staff_management()
 
     # --------------------------------------------------------
