@@ -1096,6 +1096,23 @@ def show_task_project_manager(user_id):
             )
 
 
+# ------------------------------------------------------------
+# ADMIN CENTRE CONNECTION
+# ------------------------------------------------------------
+
+def show_admin_task_manager(user_id):
+    """
+    Entry point used by the Pan Ideate Africa Administration Centre.
+
+    The Admin Centre expects this function name, while the main
+    Task & Project Manager uses show_task_project_manager().
+    This wrapper keeps both entry points connected to the same
+    Task Manager without creating a second Task Manager.
+    """
+    return show_task_project_manager(user_id)
+
+
+
 # Safe direct execution for testing this module alone.
 if __name__ == "__main__":
     st.set_page_config(
