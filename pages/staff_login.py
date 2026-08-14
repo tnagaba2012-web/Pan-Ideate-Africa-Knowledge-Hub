@@ -12,6 +12,7 @@ import uuid
 import mimetypes
 from pages.document_centre import show_document_centre
 from pages.leave_attendance import show_staff_attendance
+from pages.expenses_procurement import show_staff_expenses_procurement
 
 # ============================================================
 # PAN IDEATE AFRICA
@@ -1784,7 +1785,8 @@ def show_staff_portal():
         "✉️ Messages",
         "👤 My Profile",
         "📁 Documents",
-        "🕘 Leave & Attendance"
+        "🕘 Leave & Attendance",
+        "💰 Expenses & Procurement"
     ]   
 
     if staff["role"] == "Super Admin":
@@ -1922,11 +1924,17 @@ def show_staff_portal():
         show_staff_attendance(staff["id"])
 
     # --------------------------------------------------------
+    # EXPENSES & PROCUREMENT TAB
+    # --------------------------------------------------------
+    with selected_tab[7]:
+        show_staff_expenses_procurement(staff["id"])
+
+    # --------------------------------------------------------
     # SUPER ADMIN STAFF MANAGEMENT TAB
     # --------------------------------------------------------
     if staff["role"] == "Super Admin":
-        if len(selected_tab) > 7:
-            with selected_tab[7]:
+        if len(selected_tab) > 8:
+            with selected_tab[8]:
                 show_staff_management()
 
     # --------------------------------------------------------

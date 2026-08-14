@@ -25,6 +25,7 @@ from pages.notification_centre import (
 from pages.task_manager import show_admin_task_manager
 from pages.document_centre import show_admin_document_centre
 from pages.leave_attendance import show_admin_leave_attendance
+from pages.expenses_procurement import show_admin_expenses_procurement
 from pages.staff_login import init_database as init_staff_database, create_initial_admin
 
 # ============================================================
@@ -116,6 +117,7 @@ def show_admin():
             "❤️ Donation Requests",
             "👥 Staff Management",
             "🕘 Leave & Attendance",
+            "💰 Expenses & Procurement",
             "📋 Task & Project Manager",
             "💬 Staff Communications",
             "✉️ Staff Messages",
@@ -1310,6 +1312,39 @@ def show_admin():
                 )
         except Exception as error:
             st.error(f"Unable to open Leave & Attendance: {error}")
+
+    # ========================================================
+    # EXPENSES & PROCUREMENT
+    # ========================================================
+
+    elif admin_option == "💰 Expenses & Procurement":
+
+        try:
+            init_staff_database()
+            create_initial_admin()
+            connection = get_connection()
+            admin_row = connection.execute(
+                """
+                SELECT id, full_name, role, status
+                FROM staff_users
+                WHERE username = 'admin'
+                  AND role = 'Super Admin'
+                  AND status = 'Active'
+                LIMIT 1
+                """
+            ).fetchone()
+            connection.close()
+
+            if admin_row:
+                show_admin_expenses_procurement(admin_row["id"])
+            else:
+                st.error(
+                    "The central Super Admin staff account could not be found."
+                )
+        except Exception as error:
+            st.error(
+                f"Unable to open Expenses & Procurement: {error}"
+            )
 
     elif admin_option == "📋 Task & Project Manager":
         admin_staff_id = None
