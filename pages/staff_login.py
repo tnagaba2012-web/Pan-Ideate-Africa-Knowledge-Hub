@@ -10,7 +10,7 @@ from pathlib import Path
 from datetime import datetime
 import uuid
 import mimetypes
-
+from pages.document_centre import show_document_centre
 
 # ============================================================
 # PAN IDEATE AFRICA
@@ -1782,7 +1782,8 @@ def show_staff_portal():
         "👥 Staff Directory",
         "✉️ Messages",
         "👤 My Profile"
-    ]
+        "📁 Documents"
+    ]   
 
     if staff["role"] == "Super Admin":
         tabs.append("🛡️ Staff Management")
@@ -1906,6 +1907,11 @@ def show_staff_portal():
     # --------------------------------------------------------
     with selected_tab[4]:
         show_profile()
+    # --------------------------------------------------------
+# DOCUMENT CENTRE
+# --------------------------------------------------------
+    with selected_tab[5]:
+        show_document_centre(staff["id"])
 
     # --------------------------------------------------------
     # SUPER ADMIN STAFF MANAGEMENT TAB
