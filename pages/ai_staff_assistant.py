@@ -1,4 +1,5 @@
 import sqlite3
+import re
 from pathlib import Path
 from datetime import datetime, date, timedelta
 import streamlit as st
@@ -362,10 +363,162 @@ def add_appointment(staff_id, title, appointment_date, start_time,
     con.close()
     return True, rid
 
+
+def directory_rows():
+    """Return Staff Directory records for the Assistant's authorized lookups."""
+    try:
+        from pages.staff_directory import get_directory_staff
+        return get_directory_staff(status="Active")
+    except Exception:
+        return []
+
+
+def _normalize(value):
+    return re.sub(r"[^a-z0-9]+", " ", (value or "").lower()).strip()
+
+
+def find_directory_staff(question):
+    """Find the most likely active staff member mentioned in a question."""
+    rows = directory_rows()
+    if not rows:
+        return None
+
+    q = _normalize(question)
+
+    # Prefer exact full-name / username / staff-ID matches.
+    exact = []
+    for row in rows:
+        candidates = [
+            row["full_name"],
+            row["username"],
+            row["staff_id"],
+        ]
+        for candidate in candidates:
+            n = _normalize(candidate)
+            if n and n in q:
+                exact.append(row)
+                break
+
+    if len(exact) == 1:
+        return exact[0]
+
+    # Fall back to matching the meaningful name tokens.
+    best = None
+    best_score = 0
+    for row in rows:
+        name = _normalize(row["full_name"])
+        tokens = [t for t in name.split() if len(t) >= 3]
+        score = sum(1 for token in tokens if token in q)
+        if score > best_score:
+            best_score = score
+            best = row
+
+    return best if best_score else None
+
+
+def _directory_answer(question):
+    """Answer basic people/company questions from the Staff Directory."""
+    q = _normalize(question)
+    person = find_directory_staff(question)
+
+    # Department-wide queries.
+    if person is None:
+        rows = directory_rows()
+
+        dept = None
+        for row in rows:
+            d = _normalize(row["department"])
+            if d and d in q:
+                dept = row["department"]
+                break
+
+        if dept and any(word in q for word in (
+            "who", "staff", "people", "employee", "employees", "work",
+            "works", "department", "team"
+        )):
+            members = [r for r in rows if r["department"] == dept]
+            if members:
+                names = []
+                for r in members:
+                    title = r["job_title"] or r["role"] or "Staff"
+                    names.append(f"• {r['full_name']} — {title}")
+                return (
+                    f"**{dept}** currently has {len(members)} active "
+                    "staff member(s):\n\n" + "\n".join(names)
+                )
+
+        if any(word in q for word in (
+            "who is active", "active staff", "all staff", "list staff"
+        )):
+            return "\n".join(
+                f"• {r['full_name']} — "
+                f"{r['job_title'] or r['role'] or 'Staff'}"
+                for r in rows
+            )
+
+        return None
+
+    name = person["full_name"]
+    title = person["job_title"] or person["role"] or "Staff"
+    department = person["department"] or "Department not yet assigned"
+
+    if any(word in q for word in (
+        "role", "position", "job", "title", "what does", "responsible"
+    )):
+        return (
+            f"**{name}** is **{title}** in the **{department}** "
+            "department."
+        )
+
+    if any(word in q for word in ("department", "where does", "which department")):
+        return f"**{name}** works in the **{department}** department."
+
+    if any(word in q for word in ("phone", "telephone", "contact number", "mobile")):
+        phone = person["phone"] or "No phone number has been entered in the Staff Directory."
+        return f"**{name}'s phone:** {phone}"
+
+    if any(word in q for word in ("email", "e-mail", "mail address")):
+        email = person["email"] or "No email address has been entered in the Staff Directory."
+        return f"**{name}'s email:** {email}"
+
+    if any(word in q for word in ("location", "office", "work place", "workplace")):
+        location = person["work_location"] or "No work location has been entered in the Staff Directory."
+        return f"**{name}'s work location:** {location}"
+
+    if any(word in q for word in ("joined", "date joined", "started", "start date")):
+        joined = person["date_joined"] or "No joining date has been entered in the Staff Directory."
+        return f"**{name}'s date joined:** {joined}"
+
+    if any(word in q for word in ("status", "active", "inactive", "suspended")):
+        return f"**{name}'s account status:** {person['status']}."
+
+    if any(word in q for word in ("about", "profile", "bio", "who is")):
+        bio = person["bio"] or "No additional profile biography has been entered."
+        return (
+            f"**{name}**\n\n"
+            f"**Job title:** {title}\n\n"
+            f"**Department:** {department}\n\n"
+            f"**Status:** {person['status']}\n\n"
+            f"**Profile:** {bio}"
+        )
+
+    return (
+        f"**{name}** is **{title}** in **{department}**. "
+        "You can ask me for the person's job title, department, "
+        "phone, email, work location, joining date, status or profile."
+    )
+
 def assistant_response(question, staff_id):
     p = get_staff(staff_id)
     if not p:
         return "I could not identify your staff account."
+
+    # First try the internal Staff Directory so people/company
+    # questions are answered from Pan Ideate Africa's actual records.
+    directory_answer = _directory_answer(question)
+    if directory_answer:
+        return directory_answer
+
     q = (question or "").lower()
     if any(x in q for x in ("late", "attendance", "arrive", "sign in")):
         s = attendance_settings()
@@ -410,8 +563,8 @@ def show_staff_ai_assistant(staff_id):
     with t1:
         q = st.text_area(
             "What do you need help with?",
-            placeholder="Ask about attendance, leave, appointments, "
-                        "expenses, procurement or alerts...")
+            placeholder="Ask about staff, roles, departments, attendance, leave, "
+                        "appointments, expenses, procurement or alerts...")
         if st.button("🤖 Ask Assistant", type="primary",
                      use_container_width=True):
             st.info(assistant_response(q, staff_id))
