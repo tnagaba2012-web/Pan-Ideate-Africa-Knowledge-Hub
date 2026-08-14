@@ -1073,17 +1073,37 @@ def show_staff_meeting_centre(staff_id):
         f"Signed in as: {person['full_name']} • {person['role']}"
     )
 
+    # Check whether this staff member has been authorized by Admin
+    # to organize meetings for a specific department.
+    permission = get_meeting_permission(staff_id)
+    can_organize = bool(
+        permission
+        and permission["can_organize"]
+        and (permission["department"] or "").strip()
+    )
+
+    if can_organize:
+        st.info(
+            f"🔐 Meeting Organizer Permission: **Authorized** • "
+            f"Department: **{permission['department']}**"
+        )
+
     c1, c2, c3 = st.columns(3)
 
     c1.metric("📅 Upcoming Meetings", metrics["upcoming"])
     c2.metric("📌 My Open Actions", metrics["actions"])
     c3.metric("⚠️ My Overdue Actions", metrics["overdue"])
 
-    tabs = st.tabs([
+    tab_labels = [
         "📅 My Meetings",
         "📌 My Actions",
         "📝 Meeting Details",
-    ])
+    ]
+
+    if can_organize:
+        tab_labels.append("➕ Arrange Meeting")
+
+    tabs = st.tabs(tab_labels)
 
     with tabs[0]:
         meetings = get_meetings_for_staff(
@@ -1321,6 +1341,129 @@ def show_staff_meeting_centre(staff_id):
                             f"{action['due_date'] or 'Not set'} "
                             f"• Status: {action['status']}"
                         )
+
+
+    # --------------------------------------------------------
+    # DEPARTMENT MEETING ORGANIZER
+    # --------------------------------------------------------
+    if can_organize:
+        with tabs[3]:
+            authorized_department = (
+                permission["department"] or ""
+            ).strip()
+
+            st.subheader("➕ Arrange Department Meeting")
+            st.success(
+                f"You are authorized to organize meetings for: "
+                f"**{authorized_department}**"
+            )
+
+            st.caption(
+                "This permission was granted by an Administrator. "
+                "You can create meetings only for your authorized department."
+            )
+
+            participant_people = get_authorized_participants(
+                staff_id,
+                authorized_department,
+            )
+
+            people_map = {
+                staff_label(p): p["id"]
+                for p in participant_people
+                if p["id"] != staff_id
+            }
+
+            with st.form("staff_create_department_meeting_form"):
+                st.write(f"**Organizer:** {person['full_name']}")
+                st.write(f"**Department:** {authorized_department}")
+
+                selected_participants = st.multiselect(
+                    "Participants",
+                    list(people_map.keys()),
+                )
+
+                title = st.text_input(
+                    "Meeting Title",
+                    placeholder="e.g. Weekly Department Meeting",
+                )
+
+                c1, c2 = st.columns(2)
+
+                with c1:
+                    meeting_date = st.date_input(
+                        "Meeting Date",
+                        value=date.today(),
+                    )
+
+                with c2:
+                    start_time = st.time_input("Start Time")
+
+                end_time = st.text_input(
+                    "Expected End Time",
+                    placeholder="e.g. 11:30",
+                )
+
+                location = st.text_input("Location")
+
+                meeting_link = st.text_input(
+                    "Meeting / Video Link (optional)"
+                )
+
+                purpose = st.text_area(
+                    "Purpose",
+                    height=80,
+                )
+
+                agenda = st.text_area(
+                    "Agenda",
+                    height=140,
+                    placeholder=(
+                        "1. Opening\n"
+                        "2. Previous action points\n"
+                        "3. New matters\n"
+                        "4. Decisions\n"
+                        "5. Closing"
+                    ),
+                )
+
+                create = st.form_submit_button(
+                    "📅 Create Department Meeting",
+                    type="primary",
+                    use_container_width=True,
+                )
+
+                if create:
+                    participant_ids = [
+                        people_map[label]
+                        for label in selected_participants
+                    ]
+
+                    # Backend authorization is checked again inside
+                    # create_meeting(); the screen is not the security boundary.
+                    ok, result = create_meeting(
+                        title,
+                        meeting_date.isoformat(),
+                        start_time.strftime("%H:%M"),
+                        end_time.strip(),
+                        location,
+                        meeting_link,
+                        staff_id,
+                        purpose,
+                        agenda,
+                        participant_ids,
+                        authorized_department,
+                        "Department",
+                        staff_id,
+                    )
+
+                    if ok:
+                        st.success(
+                            f"Meeting #{result} created successfully."
+                        )
+                        st.rerun()
+                    else:
+                        st.error(result)
 
 
 # ============================================================
