@@ -335,22 +335,26 @@ def _show_authority_profiles(super_admin_id):
             [1, 2, 3, 4],
             index=[1, 2, 3, 4].index(current_level),
             format_func=lambda x: level_labels[x],
+            key=f"approval_authority_level_{staff_id}",
         )
 
         access = st.checkbox(
             "✅ Allow access to Approval Centre",
             value=current_access or level == 4,
+            key=f"approval_access_{staff_id}",
         )
 
         department = st.text_input(
             "Authorized Department",
             value=current_department,
             placeholder="e.g. Agriculture",
+            key=f"approval_department_{staff_id}",
         )
 
         all_departments = st.checkbox(
             "🌍 Authority covers all departments",
             value=current_all_departments or level == 4,
+            key=f"approval_all_departments_{staff_id}",
         )
 
         col1, col2 = st.columns(2)
@@ -359,13 +363,15 @@ def _show_authority_profiles(super_admin_id):
             max_leave_days = st.number_input(
                 "Maximum leave days (0 = none, -1 = unlimited)",
                 min_value=-1,
-                value=current_leave,
+                value=int(current_leave),
                 step=1,
+                key=f"approval_max_leave_days_{staff_id}",
             )
 
             can_approve_early = st.checkbox(
                 "🚪 Can approve early sign-out",
                 value=current_early,
+                key=f"approval_early_exit_{staff_id}",
             )
 
             expense_currency = st.selectbox(
@@ -376,13 +382,15 @@ def _show_authority_profiles(super_admin_id):
                     if current_expense_currency in currencies
                     else 0
                 ),
+                key=f"approval_expense_currency_{staff_id}",
             )
 
             expense_limit = st.number_input(
                 "Expense limit (0 = none, -1 = unlimited)",
                 min_value=-1.0,
-                value=current_expense,
+                value=float(current_expense),
                 step=10000.0 if expense_currency == "UGX" else 100.0,
+                key=f"approval_expense_limit_{staff_id}",
             )
 
         with col2:
@@ -394,13 +402,15 @@ def _show_authority_profiles(super_admin_id):
                     if current_procurement_currency in currencies
                     else 0
                 ),
+                key=f"approval_procurement_currency_{staff_id}",
             )
 
             procurement_limit = st.number_input(
                 "Procurement limit (0 = none, -1 = unlimited)",
                 min_value=-1.0,
-                value=current_procurement,
+                value=float(current_procurement),
                 step=10000.0 if procurement_currency == "UGX" else 100.0,
+                key=f"approval_procurement_limit_{staff_id}",
             )
 
         save = st.form_submit_button(

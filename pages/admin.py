@@ -1,5 +1,6 @@
 import os
 import streamlit as st
+import streamlit.components.v1 as components
 
 from pages.business_suite_modules import subscriptions
 
@@ -139,68 +140,413 @@ def show_admin():
     st.divider()
 
     # ========================================================
-    # DASHBOARD
+    # ADVANCED ADMIN DASHBOARD
     # ========================================================
 
     if admin_option == "Dashboard":
 
-        st.subheader("📊 Administration Overview")
+        st.subheader("📊 Advanced Administration Dashboard")
+        st.caption(
+            "Pan Ideate Africa — organization-wide operations, workforce, "
+            "approvals, tasks, meetings and payroll overview."
+        )
 
         staff_counts = get_staff_counts()
 
-        col1, col2, col3, col4 = st.columns(4)
+        # ----------------------------------------------------
+        # Safe dashboard helpers. These never assume that a newer
+        # module/database table already exists.
+        # ----------------------------------------------------
+        def _table_exists(connection, table_name):
+            row = connection.execute(
+                "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ? LIMIT 1",
+                (table_name,)
+            ).fetchone()
+            return row is not None
 
-        with col1:
-            st.metric(
-                "📨 Messages",
-                message_count
+        def _safe_count(connection, table_names, where=None, params=()):
+            for table_name in table_names:
+                if _table_exists(connection, table_name):
+                    try:
+                        sql = f"SELECT COUNT(*) FROM {table_name}"
+                        if where:
+                            sql += f" WHERE {where}"
+                        return int(connection.execute(sql, params).fetchone()[0])
+                    except Exception:
+                        continue
+            return 0
+
+        def _safe_sum(connection, table_names, column_names):
+            for table_name in table_names:
+                if not _table_exists(connection, table_name):
+                    continue
+                for column_name in column_names:
+                    try:
+                        row = connection.execute(
+                            f"SELECT COALESCE(SUM({column_name}), 0) FROM {table_name}"
+                        ).fetchone()
+                        return float(row[0] or 0)
+                    except Exception:
+                        continue
+            return 0.0
+
+        def _ensure_dashboard_settings(connection):
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS admin_dashboard_settings (
+                    id INTEGER PRIMARY KEY CHECK (id = 1),
+                    next_salary_date TEXT,
+                    salary_amount REAL DEFAULT 0,
+                    updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+                )
+                """
             )
-
-        with col2:
-            st.metric(
-                "🤝 Partnerships",
-                partnership_count
+            connection.execute(
+                """
+                INSERT OR IGNORE INTO admin_dashboard_settings
+                (id, next_salary_date, salary_amount)
+                VALUES (1, NULL, 0)
+                """
             )
+            connection.commit()
 
-        with col3:
-            st.metric(
-                "❤️ Donations",
-                donation_count
-            )
+        connection = get_connection()
+        _ensure_dashboard_settings(connection)
+        dashboard_settings = connection.execute(
+            "SELECT next_salary_date, salary_amount FROM admin_dashboard_settings WHERE id = 1"
+        ).fetchone()
 
-        with col4:
-            st.metric(
-                "👥 Active Staff",
-                staff_counts["active"]
-            )
+        # Organization-wide operational counts. Existing tables are used
+        # where available; missing future modules simply report zero.
+        staff_unread = sum(
+            get_unread_staff_count(employee["id"])
+            for employee in get_all_staff()
+        )
+        notification_count = 0
+        try:
+            admin_row = connection.execute(
+                """
+                SELECT id
+                FROM staff_users
+                WHERE LOWER(username) = 'admin'
+                  AND status = 'Active'
+                LIMIT 1
+                """
+            ).fetchone()
+            if admin_row:
+                notification_count = int(get_notification_count(admin_row["id"]))
+        except Exception:
+            notification_count = 0
 
+        pending_tasks = _safe_count(
+            connection,
+            ["tasks", "task_items", "project_tasks", "staff_tasks"],
+            "status IN ('Pending', 'Open', 'Assigned', 'In Progress')"
+        )
+        overdue_tasks = _safe_count(
+            connection,
+            ["tasks", "task_items", "project_tasks", "staff_tasks"],
+            "status NOT IN ('Completed', 'Closed', 'Cancelled') AND due_date < date('now')"
+        )
+        pending_approvals = _safe_count(
+            connection,
+            ["approval_requests", "approval_items", "approval_actions"],
+            "status IN ('Pending', 'pending', 'Awaiting Approval')"
+        )
+        upcoming_meetings = _safe_count(
+            connection,
+            ["meetings", "meeting_records", "department_meetings"],
+            "status NOT IN ('Cancelled', 'Completed')"
+        )
+        open_actions = _safe_count(
+            connection,
+            ["meeting_actions", "actions", "meeting_followups"],
+            "status NOT IN ('Completed', 'Closed')"
+        )
+        on_leave = _safe_count(
+            connection,
+            ["leave_requests", "leave_records", "attendance_leave"],
+            "status IN ('Approved', 'On Leave', 'approved', 'on leave')"
+        )
+        pending_expenses = _safe_count(
+            connection,
+            ["expense_claims", "expenses", "expense_requests"],
+            "status IN ('Pending', 'Submitted', 'Awaiting Approval')"
+        )
+        pending_procurement = _safe_count(
+            connection,
+            ["procurement_requests", "procurement", "purchase_requests"],
+            "status IN ('Pending', 'Submitted', 'Awaiting Approval')"
+        )
+
+        # ----------------------------------------------------
+        # TOP SNAPSHOT
+        # ----------------------------------------------------
+        top = st.columns(4)
+        with top[0]:
+            st.metric("👥 Active Staff", staff_counts["active"])
+        with top[1]:
+            st.metric("📨 Unread Staff Messages", staff_unread)
+        with top[2]:
+            st.metric("🔔 Open Notifications", notification_count)
+        with top[3]:
+            st.metric("📝 Pending Approvals", pending_approvals)
+
+        top2 = st.columns(4)
+        with top2[0]:
+            st.metric("📋 Open Tasks", pending_tasks)
+        with top2[1]:
+            st.metric("⏰ Overdue Tasks", overdue_tasks)
+        with top2[2]:
+            st.metric("📅 Upcoming Meetings", upcoming_meetings)
+        with top2[3]:
+            st.metric("🏖️ Staff on Leave", on_leave)
+
+        # ----------------------------------------------------
+        # MANAGEMENT ALERTS
+        # ----------------------------------------------------
         st.divider()
+        st.markdown("### 🚨 Management Attention")
+        alerts = []
+        if overdue_tasks:
+            alerts.append(("🔴", f"{overdue_tasks} task(s) are overdue."))
+        if pending_approvals:
+            alerts.append(("🟠", f"{pending_approvals} approval request(s) need attention."))
+        if pending_expenses:
+            alerts.append(("🟠", f"{pending_expenses} expense request(s) are awaiting action."))
+        if pending_procurement:
+            alerts.append(("🟠", f"{pending_procurement} procurement request(s) are awaiting action."))
+        if open_actions:
+            alerts.append(("🟠", f"{open_actions} meeting action(s) remain open."))
+        if not alerts:
+            st.success("🟢 No major operational alerts detected right now.")
+        else:
+            for icon, message in alerts:
+                st.warning(f"{icon} {message}")
 
-        st.subheader("🛡️ Staff Overview")
+        # ----------------------------------------------------
+        # WORKFORCE STATUS
+        # ----------------------------------------------------
+        st.divider()
+        st.markdown("### 🛡️ Workforce Status")
+        workforce = st.columns(4)
+        with workforce[0]:
+            st.metric("Total Staff", staff_counts["total"])
+        with workforce[1]:
+            st.metric("🟢 Active", staff_counts["active"])
+        with workforce[2]:
+            st.metric("🔴 Inactive", staff_counts["inactive"])
+        with workforce[3]:
+            st.metric("🏖️ On Leave", on_leave)
 
-        staff_col1, staff_col2, staff_col3 = st.columns(3)
+        role_counts = {}
+        for employee in get_all_staff():
+            role = employee["role"] or "Unassigned"
+            role_counts[role] = role_counts.get(role, 0) + 1
 
-        with staff_col1:
-            st.metric(
-                "Total Staff",
-                staff_counts["total"]
+        if role_counts:
+            st.markdown("#### 👤 Staff by Role")
+            role_cols = st.columns(min(4, max(1, len(role_counts))))
+            for index, (role, count) in enumerate(sorted(role_counts.items())):
+                with role_cols[index % len(role_cols)]:
+                    st.metric(role, count)
+
+        # ----------------------------------------------------
+        # OPERATIONS CENTRE
+        # ----------------------------------------------------
+        st.divider()
+        st.markdown("### ⚙️ Operations Centre")
+        operations = st.columns(4)
+        with operations[0]:
+            st.metric("📋 Tasks", pending_tasks)
+        with operations[1]:
+            st.metric("📅 Meetings", upcoming_meetings)
+        with operations[2]:
+            st.metric("💰 Pending Expenses", pending_expenses)
+        with operations[3]:
+            st.metric("🛒 Pending Procurement", pending_procurement)
+
+        st.caption(
+            "Use the Administration menu to open the detailed Tasks, Meeting, "
+            "Approval, Leave & Attendance, and operational modules."
+        )
+
+        # ----------------------------------------------------
+        # SALARY PAYMENT COUNTDOWN
+        # ----------------------------------------------------
+        st.divider()
+        st.markdown("### 💰 Salary Payment Countdown")
+        st.caption(
+            "Set the next salary payment date here. The countdown is visible "
+            "to authorized administrators only."
+        )
+
+        from datetime import date, datetime
+
+        saved_salary_date = None
+        if dashboard_settings and dashboard_settings["next_salary_date"]:
+            try:
+                saved_salary_date = date.fromisoformat(dashboard_settings["next_salary_date"])
+            except (TypeError, ValueError):
+                saved_salary_date = None
+
+        salary_date = st.date_input(
+            "Next salary payment date",
+            value=saved_salary_date or date.today(),
+            key="admin_salary_payment_date"
+        )
+
+        salary_amount = st.number_input(
+            "Estimated total payroll (UGX, optional)",
+            min_value=0.0,
+            value=float(dashboard_settings["salary_amount"] or 0) if dashboard_settings else 0.0,
+            step=100000.0,
+            key="admin_salary_amount"
+        )
+
+        salary_col1, salary_col2 = st.columns(2)
+        with salary_col1:
+            if st.button("💾 Save Salary Settings", key="save_salary_settings", use_container_width=True):
+                connection.execute(
+                    """
+                    UPDATE admin_dashboard_settings
+                    SET next_salary_date = ?,
+                        salary_amount = ?,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE id = 1
+                    """,
+                    (salary_date.isoformat(), salary_amount)
+                )
+                connection.commit()
+                st.success("Salary payment settings saved.")
+                st.rerun()
+        with salary_col2:
+            st.metric("👥 Employees to Pay", staff_counts["active"])
+
+        now = datetime.now()
+        target = datetime.combine(salary_date, datetime.min.time())
+        remaining_seconds = int((target - now).total_seconds())
+
+        if remaining_seconds > 0:
+            days_left = remaining_seconds // 86400
+            hours_left = (remaining_seconds % 86400) // 3600
+            minutes_left = (remaining_seconds % 3600) // 60
+            seconds_left = remaining_seconds % 60
+            countdown_text = (
+                f"{days_left} DAYS {hours_left:02d} HOURS "
+                f"{minutes_left:02d} MINUTES {seconds_left:02d} SECONDS"
+            )
+            st.success(f"💰 NEXT SALARY PAYMENT — {countdown_text}")
+
+            # Live browser countdown. It does not require a new database
+            # request every second and therefore does not disturb the app.
+            target_iso = target.isoformat()
+            components.html(
+                f"""
+                <div style="font-family:Arial,sans-serif;text-align:center;">
+                  <div style="font-size:16px;font-weight:600;margin-bottom:6px;">
+                    ⏳ Live Salary Countdown
+                  </div>
+                  <div id="salary-countdown" style="font-size:24px;font-weight:700;">
+                    {countdown_text}
+                  </div>
+                </div>
+                <script>
+                const target = new Date({target_iso!r}).getTime();
+                function updateSalaryCountdown() {{
+                    const now = new Date().getTime();
+                    let distance = target - now;
+                    const box = document.getElementById('salary-countdown');
+                    if (!box) return;
+                    if (distance <= 0) {{
+                        box.textContent = 'SALARY PAYMENT DATE IS TODAY';
+                        return;
+                    }}
+                    const days = Math.floor(distance / 86400000);
+                    distance %= 86400000;
+                    const hours = Math.floor(distance / 3600000);
+                    distance %= 3600000;
+                    const minutes = Math.floor(distance / 60000);
+                    const seconds = Math.floor((distance % 60000) / 1000);
+                    box.textContent = `${{days}} DAYS ${{String(hours).padStart(2,'0')}} HOURS ${{String(minutes).padStart(2,'0')}} MINUTES ${{String(seconds).padStart(2,'0')}} SECONDS`;
+                }}
+                updateSalaryCountdown();
+                setInterval(updateSalaryCountdown, 1000);
+                </script>
+                """,
+                height=95,
+            )
+        elif remaining_seconds == 0:
+            st.error("💰 SALARY PAYMENT DATE IS TODAY.")
+        else:
+            st.warning(
+                "⚠️ The salary payment date has passed. Update it to the next payment date."
             )
 
-        with staff_col2:
-            st.metric(
-                "Active",
-                staff_counts["active"]
-            )
+        payroll_info = st.columns(3)
+        with payroll_info[0]:
+            st.metric("📅 Payment Date", salary_date.strftime("%d %B %Y"))
+        with payroll_info[1]:
+            st.metric("💵 Estimated Payroll", f"UGX {salary_amount:,.0f}")
+        with payroll_info[2]:
+            average_salary = salary_amount / staff_counts["active"] if staff_counts["active"] else 0
+            st.metric("💵 Average / Active Employee", f"UGX {average_salary:,.0f}")
 
-        with staff_col3:
-            st.metric(
-                "Inactive",
-                staff_counts["inactive"]
-            )
+        # ----------------------------------------------------
+        # DEPARTMENT / ROLE OVERVIEW
+        # ----------------------------------------------------
+        st.divider()
+        st.markdown("### 🏢 Organization Overview")
+        st.info(
+            "Department-level analytics will automatically become available "
+            "when department assignments are stored in the central staff records. "
+            "For now, the dashboard shows the available role structure without "
+            "inventing department data."
+        )
+
+        # ----------------------------------------------------
+        # MANAGEMENT SHORTCUTS
+        # ----------------------------------------------------
+        st.divider()
+        st.markdown("### 🔗 Management Shortcuts")
+        shortcuts = st.columns(5)
+        shortcut_labels = [
+            "👥 Staff Directory",
+            "🕘 Leave & Attendance",
+            "📋 Tasks",
+            "📅 Meetings",
+            "✅ Approvals",
+            "💰 Expenses",
+            "🛒 Procurement",
+            "📁 Documents",
+            "🤖 AI Assistant",
+            "🔔 Notifications",
+        ]
+        shortcut_targets = [
+            "👥 Staff Directory",
+            "🕘 Leave & Attendance",
+            "📋 Task & Project Manager",
+            "📅 Meeting Centre",
+            "✅ Approval Centre",
+            "📋 Task & Project Manager",
+            "📋 Task & Project Manager",
+            "📁 Document Centre",
+            "🤖 AI Staff Assistant",
+            "🔔 Notification Centre",
+        ]
+
+        for index, label in enumerate(shortcut_labels):
+            with shortcuts[index % len(shortcuts)]:
+                if st.button(label, key=f"dashboard_shortcut_{index}", use_container_width=True):
+                    st.session_state["admin_area"] = shortcut_targets[index]
+                    st.rerun()
+
+        connection.close()
 
         st.info(
-            "The Administration Centre is now connected to "
-            "the central staff database."
+            "The Advanced Admin Dashboard is connected to the central staff "
+            "database and is designed to grow as each operational module is "
+            "connected."
         )
 
     # ========================================================
