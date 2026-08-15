@@ -33,13 +33,13 @@ except Exception:
 
 # ============================================================
 # PAN IDEATE AFRICA
-# EXPENSES & PROCUREMENT V1
+# EXPENSES & PROCUREMENT V2 — ADVANCED FINANCE & EXPENDITURE CONTROL
 # ============================================================
 # Independent V1 module.
 # Uses the existing data/pan_ideate.db and staff_users table.
 # Creates only its own expense/procurement tables.
 #
-# V1 FEATURES
+# V2 FEATURES
 # - Expense claim submission
 # - Purchase request submission
 # - Approval / rejection workflow
@@ -51,6 +51,13 @@ except Exception:
 # - Audit trail
 # - Notification Centre integration
 # - CSV export
+# - Automatic expenditure ledger
+# - Daily / monthly / yearly totals
+# - Category expenditure analysis
+# - Budget vs actual tracking
+# - Actual procurement capture
+# - Automatic posting of approved expenses
+# - Multi-currency totals (kept separate for accuracy)
 # ============================================================
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -226,6 +233,83 @@ def init_database():
             1 if person["role"] in {"Super Admin", "Administrator", "Finance"} else 0,
             1 if person["role"] in {"Super Admin", "Administrator", "Finance"} else 0,
         ))
+
+    con.commit()
+
+    # ========================================================
+    # ADVANCED FINANCE TABLES / MIGRATIONS
+    # ========================================================
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS finance_ledger (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            transaction_date TEXT NOT NULL,
+            transaction_type TEXT NOT NULL,
+            category TEXT NOT NULL,
+            item_description TEXT NOT NULL,
+            quantity REAL DEFAULT 1,
+            unit TEXT DEFAULT 'item',
+            unit_cost REAL DEFAULT 0,
+            amount REAL NOT NULL,
+            currency TEXT NOT NULL DEFAULT 'UGX',
+            payment_method TEXT DEFAULT 'Not specified',
+            supplier TEXT,
+            department TEXT,
+            project TEXT,
+            staff_id INTEGER,
+            source_type TEXT,
+            source_id INTEGER,
+            receipt_reference TEXT,
+            notes TEXT,
+            created_by INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(source_type, source_id, transaction_type)
+        )
+    """)
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS finance_budgets (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            budget_year INTEGER NOT NULL,
+            category TEXT NOT NULL,
+            budget_amount REAL NOT NULL,
+            currency TEXT NOT NULL DEFAULT 'UGX',
+            notes TEXT,
+            created_by INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(budget_year, category, currency)
+        )
+    """)
+
+    cur.execute("""
+        CREATE INDEX IF NOT EXISTS idx_ledger_date
+        ON finance_ledger(transaction_date)
+    """)
+    cur.execute("""
+        CREATE INDEX IF NOT EXISTS idx_ledger_category
+        ON finance_ledger(category)
+    """)
+    cur.execute("""
+        CREATE INDEX IF NOT EXISTS idx_ledger_currency
+        ON finance_ledger(currency)
+    """)
+
+    # Add actual-purchase fields to the existing procurement table without
+    # destroying any existing database/data.
+    existing_purchase_cols = {
+        row["name"]
+        for row in cur.execute("PRAGMA table_info(purchase_requests)").fetchall()
+    }
+    purchase_migrations = {
+        "actual_unit_cost": "ALTER TABLE purchase_requests ADD COLUMN actual_unit_cost REAL",
+        "actual_quantity": "ALTER TABLE purchase_requests ADD COLUMN actual_quantity REAL",
+        "actual_purchase_date": "ALTER TABLE purchase_requests ADD COLUMN actual_purchase_date TEXT",
+        "actual_payment_method": "ALTER TABLE purchase_requests ADD COLUMN actual_payment_method TEXT",
+        "actual_receipt_reference": "ALTER TABLE purchase_requests ADD COLUMN actual_receipt_reference TEXT",
+        "actual_notes": "ALTER TABLE purchase_requests ADD COLUMN actual_notes TEXT",
+    }
+    for col, statement in purchase_migrations.items():
+        if col not in existing_purchase_cols:
+            cur.execute(statement)
 
     con.commit()
     con.close()
@@ -1085,6 +1169,535 @@ def rows_to_csv(rows, fields):
     return output.getvalue().encode("utf-8")
 
 
+
+# ============================================================
+# ADVANCED FINANCE LEDGER / AUTOMATIC REPORTING
+# ============================================================
+
+def ensure_ledger_from_approved_expenses():
+    """Automatically post every approved expense to the finance ledger."""
+    init_database()
+    con = db()
+    rows = con.execute("""
+        SELECT e.*, s.full_name
+        FROM expense_claims e
+        LEFT JOIN staff_users s ON s.id = e.staff_id
+        WHERE e.status = 'Approved'
+          AND NOT EXISTS (
+              SELECT 1 FROM finance_ledger l
+              WHERE l.source_type = 'expense'
+                AND l.source_id = e.id
+                AND l.transaction_type = 'Expense'
+          )
+    """).fetchall()
+
+    for row in rows:
+        con.execute("""
+            INSERT OR IGNORE INTO finance_ledger (
+                transaction_date, transaction_type, category,
+                item_description, quantity, unit, unit_cost, amount,
+                currency, payment_method, supplier, department, project,
+                staff_id, source_type, source_id, receipt_reference, notes,
+                created_by
+            ) VALUES (?, 'Expense', ?, ?, 1, 'item', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            row["expense_date"],
+            row["category"],
+            row["description"],
+            row["amount"],
+            row["amount"],
+            row["currency"],
+            "Not specified",
+            None,
+            None,
+            None,
+            row["staff_id"],
+            "expense",
+            row["id"],
+            row["receipt_reference"],
+            f"Automatically posted after approval; submitted by {row['full_name'] or 'staff'}",
+            row["reviewed_by"] or row["staff_id"],
+        ))
+    con.commit()
+    con.close()
+
+
+def record_actual_purchase(
+    request_id, admin_id, actual_quantity, actual_unit_cost,
+    purchase_date, payment_method, receipt_reference="", notes=""
+):
+    """Convert an approved procurement request into actual expenditure."""
+    if not has_finance_permission(admin_id, "can_review_procurement"):
+        return False, "You do not have procurement review permission."
+
+    qty = clean_quantity(actual_quantity)
+    unit_cost = clean_amount(actual_unit_cost)
+    if qty is None or unit_cost is None:
+        return False, "Enter valid actual quantity and actual unit cost."
+
+    con = db()
+    request = con.execute("""
+        SELECT p.*, s.full_name
+        FROM purchase_requests p
+        LEFT JOIN staff_users s ON s.id = p.staff_id
+        WHERE p.id = ?
+        LIMIT 1
+    """, (request_id,)).fetchone()
+
+    if not request:
+        con.close()
+        return False, "Purchase request not found."
+    if request["status"] != "Approved":
+        con.close()
+        return False, "Only approved purchase requests can be recorded as actual purchases."
+
+    already = con.execute("""
+        SELECT id FROM finance_ledger
+        WHERE source_type='procurement'
+          AND source_id=?
+          AND transaction_type='Procurement'
+        LIMIT 1
+    """, (request_id,)).fetchone()
+    if already:
+        con.close()
+        return False, "This purchase has already been recorded in the finance ledger."
+
+    total = round(qty * unit_cost, 2)
+    con.execute("""
+        UPDATE purchase_requests
+        SET actual_quantity=?,
+            actual_unit_cost=?,
+            actual_purchase_date=?,
+            actual_payment_method=?,
+            actual_receipt_reference=?,
+            actual_notes=?
+        WHERE id=?
+    """, (
+        qty, unit_cost, purchase_date.isoformat(),
+        payment_method, receipt_reference.strip(),
+        notes.strip(), request_id
+    ))
+
+    con.execute("""
+        INSERT INTO finance_ledger (
+            transaction_date, transaction_type, category,
+            item_description, quantity, unit, unit_cost, amount,
+            currency, payment_method, supplier, department, project,
+            staff_id, source_type, source_id, receipt_reference, notes,
+            created_by
+        ) VALUES (?, 'Procurement', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (
+        purchase_date.isoformat(),
+        request["category"],
+        request["item_name"],
+        qty,
+        request["unit"],
+        unit_cost,
+        total,
+        request["currency"],
+        payment_method,
+        request["supplier"],
+        None,
+        None,
+        request["staff_id"],
+        "procurement",
+        request_id,
+        receipt_reference.strip(),
+        notes.strip(),
+        admin_id,
+    ))
+    con.commit()
+    con.close()
+
+    audit(
+        "procurement", request_id, request["staff_id"], admin_id,
+        "actual_purchase_recorded",
+        f"Actual purchase {total:,.2f} {request['currency']}; {purchase_date.isoformat()}"
+    )
+    _audit_finance(
+        "ACTUAL_PURCHASE_RECORDED",
+        f"{request['item_name']} — {total:,.2f} {request['currency']}",
+        admin_id, "HIGH", "procurement", request_id
+    )
+    return True, f"Actual purchase recorded: {total:,.2f} {request['currency']}."
+
+
+def ledger_rows(start_date=None, end_date=None, category="All",
+                currency="All", transaction_type="All", search=""):
+    init_database()
+    con = db()
+    clauses = ["1=1"]
+    params = []
+
+    if start_date:
+        clauses.append("transaction_date >= ?")
+        params.append(start_date.isoformat() if hasattr(start_date, "isoformat") else str(start_date))
+    if end_date:
+        clauses.append("transaction_date <= ?")
+        params.append(end_date.isoformat() if hasattr(end_date, "isoformat") else str(end_date))
+    if category != "All":
+        clauses.append("category = ?")
+        params.append(category)
+    if currency != "All":
+        clauses.append("currency = ?")
+        params.append(currency)
+    if transaction_type != "All":
+        clauses.append("transaction_type = ?")
+        params.append(transaction_type)
+    if search.strip():
+        q = f"%{search.strip()}%"
+        clauses.append("""
+            (item_description LIKE ? OR supplier LIKE ? OR
+             receipt_reference LIKE ? OR notes LIKE ?)
+        """)
+        params.extend([q, q, q, q])
+
+    rows = con.execute(
+        f"""
+        SELECT l.*, s.full_name
+        FROM finance_ledger l
+        LEFT JOIN staff_users s ON s.id = l.staff_id
+        WHERE {' AND '.join(clauses)}
+        ORDER BY transaction_date DESC, id DESC
+        """,
+        params,
+    ).fetchall()
+    con.close()
+    return rows
+
+
+def ledger_totals(rows):
+    totals = {}
+    for row in rows:
+        currency = row["currency"]
+        totals[currency] = totals.get(currency, 0.0) + float(row["amount"] or 0)
+    return totals
+
+
+def category_totals(rows):
+    totals = {}
+    for row in rows:
+        key = (row["category"], row["currency"])
+        totals[key] = totals.get(key, 0.0) + float(row["amount"] or 0)
+    return totals
+
+
+def finance_period_summary(year, month=None):
+    """Return automatic totals by currency for a month or whole year."""
+    init_database()
+    con = db()
+    if month:
+        start = f"{year:04d}-{month:02d}-01"
+        if month == 12:
+            end = f"{year + 1:04d}-01-01"
+        else:
+            end = f"{year:04d}-{month + 1:02d}-01"
+        rows = con.execute("""
+            SELECT currency, COALESCE(SUM(amount),0) AS total, COUNT(*) AS count
+            FROM finance_ledger
+            WHERE transaction_date >= ? AND transaction_date < ?
+            GROUP BY currency
+            ORDER BY currency
+        """, (start, end)).fetchall()
+    else:
+        rows = con.execute("""
+            SELECT currency, COALESCE(SUM(amount),0) AS total, COUNT(*) AS count
+            FROM finance_ledger
+            WHERE transaction_date >= ? AND transaction_date < ?
+            GROUP BY currency
+            ORDER BY currency
+        """, (f"{year:04d}-01-01", f"{year + 1:04d}-01-01")).fetchall()
+    con.close()
+    return rows
+
+
+def monthly_totals(year, currency):
+    init_database()
+    con = db()
+    rows = con.execute("""
+        SELECT substr(transaction_date,1,7) AS month,
+               COALESCE(SUM(amount),0) AS total,
+               COUNT(*) AS count
+        FROM finance_ledger
+        WHERE transaction_date >= ?
+          AND transaction_date < ?
+          AND currency = ?
+        GROUP BY substr(transaction_date,1,7)
+        ORDER BY month
+    """, (f"{year:04d}-01-01", f"{year + 1:04d}-01-01", currency)).fetchall()
+    con.close()
+    return rows
+
+
+def budget_rows(year):
+    init_database()
+    con = db()
+    rows = con.execute("""
+        SELECT * FROM finance_budgets
+        WHERE budget_year=?
+        ORDER BY category, currency
+    """, (year,)).fetchall()
+    con.close()
+    return rows
+
+
+def save_budget(year, category, amount, currency, notes, created_by):
+    amount = clean_amount(amount)
+    if amount is None:
+        return False, "Enter a valid budget amount greater than zero."
+    init_database()
+    con = db()
+    con.execute("""
+        INSERT INTO finance_budgets
+            (budget_year, category, budget_amount, currency, notes, created_by)
+        VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(budget_year, category, currency)
+        DO UPDATE SET
+            budget_amount=excluded.budget_amount,
+            notes=excluded.notes
+    """, (year, category, amount, currency, notes.strip(), created_by))
+    con.commit()
+    con.close()
+    return True, "Budget saved."
+
+
+def budget_vs_actual(year):
+    budgets = budget_rows(year)
+    actuals = ledger_rows(
+        start_date=date(year, 1, 1),
+        end_date=date(year, 12, 31),
+    )
+    actual_map = category_totals(actuals)
+    result = []
+    for b in budgets:
+        actual = actual_map.get((b["category"], b["currency"]), 0.0)
+        budget = float(b["budget_amount"])
+        result.append({
+            "Category": b["category"],
+            "Currency": b["currency"],
+            "Budget": budget,
+            "Actual": actual,
+            "Remaining": budget - actual,
+            "Utilization %": round((actual / budget) * 100, 1) if budget else 0,
+        })
+    return result
+
+
+def ledger_to_csv(rows):
+    fields = [
+        "id", "transaction_date", "transaction_type", "category",
+        "item_description", "quantity", "unit", "unit_cost", "amount",
+        "currency", "payment_method", "supplier", "department", "project",
+        "full_name", "receipt_reference", "notes", "created_at",
+    ]
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(fields)
+    for row in rows:
+        writer.writerow([row[f] if f in row.keys() else "" for f in fields])
+    return output.getvalue().encode("utf-8")
+
+
+def show_finance_dashboard(admin_id):
+    """Full automatic management dashboard for daily/monthly/yearly expenditure."""
+    if not has_finance_permission(admin_id, "can_view_reports"):
+        st.error("🔒 Finance report permission required.")
+        return
+
+    ensure_ledger_from_approved_expenses()
+    init_database()
+
+    today = date.today()
+    year = st.selectbox(
+        "Reporting Year",
+        list(range(today.year - 5, today.year + 2)),
+        index=5,
+        key="finance_report_year",
+    )
+
+    st.subheader("📊 Financial Overview")
+    year_rows = ledger_rows(
+        start_date=date(year, 1, 1),
+        end_date=date(year, 12, 31),
+    )
+    year_totals = ledger_totals(year_rows)
+
+    metric_cols = st.columns(max(1, min(4, len(year_totals) or 1)))
+    if year_totals:
+        for col, (currency, total) in zip(metric_cols, sorted(year_totals.items())):
+            with col:
+                st.metric(f"💰 {currency} — Year Total", f"{total:,.0f}")
+    else:
+        metric_cols[0].metric("💰 Year Total", "0")
+
+    st.caption(
+        f"Automatic ledger: {len(year_rows):,} recorded expenditure transaction(s) in {year}."
+    )
+
+    tabs = st.tabs([
+        "📅 Daily / Ledger",
+        "📆 Monthly",
+        "📈 Categories",
+        "🎯 Budget vs Actual",
+    ])
+
+    with tabs[0]:
+        st.markdown("### Daily Expenditure Ledger")
+        c1, c2, c3 = st.columns(3)
+        start = c1.date_input("From", value=date(year, 1, 1), key="ledger_from")
+        end = c2.date_input("To", value=min(today, date(year, 12, 31)), key="ledger_to")
+        types = c3.selectbox(
+            "Type", ["All", "Expense", "Procurement"], key="ledger_type"
+        )
+
+        search = st.text_input(
+            "🔎 Search item, supplier, receipt or notes",
+            key="ledger_search",
+        )
+        currency = st.selectbox(
+            "Currency",
+            ["All"] + CURRENCIES,
+            key="ledger_currency",
+        )
+
+        rows = ledger_rows(
+            start_date=start,
+            end_date=end,
+            currency=currency,
+            transaction_type=types,
+            search=search,
+        )
+
+        totals = ledger_totals(rows)
+        if totals:
+            cols = st.columns(min(4, len(totals)))
+            for col, (cur, total) in zip(cols, sorted(totals.items())):
+                col.metric(f"Period total ({cur})", f"{total:,.0f}")
+        else:
+            st.info("No expenditure recorded for this period.")
+
+        if rows:
+            data = [{
+                "Date": r["transaction_date"],
+                "Type": r["transaction_type"],
+                "Category": r["category"],
+                "Item / Purpose": r["item_description"],
+                "Qty": r["quantity"],
+                "Unit": r["unit"],
+                "Unit Cost": r["unit_cost"],
+                "Total": r["amount"],
+                "Currency": r["currency"],
+                "Payment": r["payment_method"],
+                "Supplier": r["supplier"] or "",
+                "Staff": r["full_name"] or "",
+                "Receipt": r["receipt_reference"] or "",
+            } for r in rows]
+            st.dataframe(data, use_container_width=True, hide_index=True)
+
+            if has_finance_permission(admin_id, "can_export_reports"):
+                st.download_button(
+                    "⬇️ Export Finance Ledger CSV",
+                    data=ledger_to_csv(rows),
+                    file_name=f"pan_ideate_finance_ledger_{year}.csv",
+                    mime="text/csv",
+                    use_container_width=True,
+                )
+
+    with tabs[1]:
+        st.markdown("### Monthly Expenditure")
+        available_currencies = sorted({r["currency"] for r in year_rows})
+        selected_currency = st.selectbox(
+            "Currency", available_currencies or CURRENCIES,
+            key="monthly_currency",
+        )
+        monthly = monthly_totals(year, selected_currency)
+        if monthly:
+            st.dataframe(
+                [{
+                    "Month": r["month"],
+                    "Transactions": r["count"],
+                    "Total Expenditure": r["total"],
+                    "Currency": selected_currency,
+                } for r in monthly],
+                use_container_width=True,
+                hide_index=True,
+            )
+            st.bar_chart(
+                {r["month"]: r["total"] for r in monthly},
+                x_label="Month",
+                y_label=f"Expenditure ({selected_currency})",
+            )
+        else:
+            st.info(f"No {selected_currency} expenditure recorded in {year}.")
+
+    with tabs[2]:
+        st.markdown("### Expenditure by Category")
+        cat = category_totals(year_rows)
+        if cat:
+            category_data = [
+                {
+                    "Category": category,
+                    "Currency": currency,
+                    "Total": total,
+                }
+                for (category, currency), total in sorted(cat.items())
+            ]
+            st.dataframe(
+                category_data,
+                use_container_width=True,
+                hide_index=True,
+            )
+        else:
+            st.info("No category expenditure data available.")
+
+    with tabs[3]:
+        st.markdown("### 🎯 Budget vs Actual")
+        st.caption(
+            "Set annual budgets by category. Actuals are calculated automatically from the finance ledger."
+        )
+        if has_finance_permission(admin_id, "can_review_expenses"):
+            with st.form("finance_budget_form"):
+                c1, c2, c3 = st.columns(3)
+                budget_category = c1.selectbox(
+                    "Category",
+                    sorted(set(EXPENSE_CATEGORIES + PROCUREMENT_CATEGORIES)),
+                    key="budget_category",
+                )
+                budget_currency = c2.selectbox(
+                    "Currency", CURRENCIES, key="budget_currency",
+                )
+                budget_amount = c3.number_input(
+                    "Annual Budget",
+                    min_value=0.0,
+                    step=100000.0,
+                    format="%.2f",
+                    key="budget_amount",
+                )
+                budget_notes = st.text_input("Budget Notes", key="budget_notes")
+                save = st.form_submit_button(
+                    "💾 Save / Update Budget",
+                    use_container_width=True,
+                )
+            if save:
+                ok, msg = save_budget(
+                    year, budget_category, budget_amount,
+                    budget_currency, budget_notes, admin_id
+                )
+                (st.success if ok else st.error)(msg)
+                if ok:
+                    st.rerun()
+
+        budget_data = budget_vs_actual(year)
+        if budget_data:
+            st.dataframe(
+                budget_data,
+                use_container_width=True,
+                hide_index=True,
+            )
+        else:
+            st.info("No annual budgets have been configured yet.")
+
+
 # ============================================================
 # STAFF INTERFACE
 # ============================================================
@@ -1354,66 +1967,52 @@ def show_admin_expenses_procurement(admin_id):
     init_database()
 
     admin = get_staff(admin_id)
-
     if not admin or not is_approver(admin_id):
-        st.error(
-            "🔒 Authorized Administrator / Finance access required."
-        )
+        st.error("🔒 Authorized Administrator / Finance access required.")
         return
 
-    st.title("💰 Expenses & Procurement")
-    st.caption(
-        "Pan Ideate Africa — Finance & Procurement Control"
-    )
-    st.success(
-        f"Signed in as: {admin['full_name']} • {admin['role']}"
-    )
+    st.title("💰 Finance, Expenditure & Procurement Centre")
+    st.caption("Pan Ideate Africa — Automatic Financial Control & Management")
+    st.success(f"Signed in as: {admin['full_name']} • {admin['role']}")
 
+    # Automatically synchronize approved expense claims into the expenditure ledger.
+    ensure_ledger_from_approved_expenses()
     metrics = finance_metrics()
 
     c1, c2, c3, c4 = st.columns(4)
-
-    with c1:
-        st.metric(
-            "💰 Pending Expenses",
-            metrics["pending_expenses"],
-        )
-
-    with c2:
-        st.metric(
-            "🛒 Pending Purchases",
-            metrics["pending_procurement"],
-        )
-
-    with c3:
-        st.metric(
-            "✅ Approved Expenses",
-            f"{metrics['approved_expenses']:,.0f}",
-        )
-
-    with c4:
-        st.metric(
-            "✅ Approved Purchases",
-            f"{metrics['approved_procurement']:,.0f}",
-        )
+    c1.metric("🟡 Pending Expenses", metrics["pending_expenses"])
+    c2.metric("🟡 Pending Purchases", metrics["pending_procurement"])
+    c3.metric("🟢 Approved Expenses", f"{metrics['approved_expenses']:,.0f}")
+    c4.metric("🟢 Approved Purchases", f"{metrics['approved_procurement']:,.0f}")
 
     st.divider()
 
-    tab_labels = ["💰 Expense Claims", "🛒 Procurement", "📊 Reports"]
+    tab_labels = [
+        "📊 Finance Dashboard",
+        "💰 Expense Claims",
+        "🛒 Procurement",
+        "📋 Reports / Export",
+    ]
     if admin["role"] == "Super Admin":
         tab_labels.extend(["🏢 Suppliers", "🔐 Access Control"])
+
     tabs = st.tabs(tab_labels)
+
+    # --------------------------------------------------------
+    # AUTOMATIC FINANCE DASHBOARD
+    # --------------------------------------------------------
+    with tabs[0]:
+        show_finance_dashboard(admin_id)
 
     # --------------------------------------------------------
     # EXPENSE REVIEW
     # --------------------------------------------------------
-    with tabs[0]:
+    with tabs[1]:
         status_filter = st.selectbox(
             "Expense Status",
             ["All", "Pending", "Approved", "Rejected"],
             key="admin_expense_status",
         )
-
         rows = expense_claims(status=status_filter)
 
         if not rows:
@@ -1427,49 +2026,24 @@ def show_admin_expenses_procurement(admin_id):
                 }.get(row["status"], "⚪")
 
                 with st.expander(
-                    f"{icon} #{row['id']} — "
-                    f"{row['full_name']} — "
-                    f"{row['amount']:,.2f} "
-                    f"{row['currency']}"
+                    f"{icon} #{row['id']} — {row['full_name']} — "
+                    f"{row['amount']:,.2f} {row['currency']}"
                 ):
-                    st.write(
-                        f"**Staff:** {row['full_name']} "
-                        f"(@{row['username']})"
-                    )
-                    st.write(
-                        f"**Category:** {row['category']}"
-                    )
-                    st.write(
-                        f"**Amount:** "
-                        f"{row['amount']:,.2f} {row['currency']}"
-                    )
-                    st.write(
-                        f"**Expense Date:** "
-                        f"{row['expense_date']}"
-                    )
-                    st.write(
-                        f"**Description:** "
-                        f"{row['description']}"
-                    )
-
+                    st.write(f"**Staff:** {row['full_name']} (@{row['username']})")
+                    st.write(f"**Category:** {row['category']}")
+                    st.write(f"**Amount:** {row['amount']:,.2f} {row['currency']}")
+                    st.write(f"**Expense Date:** {row['expense_date']}")
+                    st.write(f"**Description:** {row['description']}")
                     if row["receipt_reference"]:
-                        st.write(
-                            f"**Receipt/Reference:** "
-                            f"{row['receipt_reference']}"
-                        )
-
-                    st.write(
-                        f"**Status:** {row['status']}"
-                    )
+                        st.write(f"**Receipt/Reference:** {row['receipt_reference']}")
+                    st.write(f"**Status:** {row['status']}")
 
                     if row["status"] == "Pending":
                         note = st.text_area(
                             "Review Note",
                             key=f"expense_note_{row['id']}",
                         )
-
                         a, b = st.columns(2)
-
                         with a:
                             if st.button(
                                 "✅ Approve",
@@ -1477,15 +2051,11 @@ def show_admin_expenses_procurement(admin_id):
                                 use_container_width=True,
                             ):
                                 ok, msg = review_expense(
-                                    row["id"],
-                                    admin_id,
-                                    "Approved",
-                                    note,
+                                    row["id"], admin_id, "Approved", note
                                 )
                                 (st.success if ok else st.error)(msg)
                                 if ok:
                                     st.rerun()
-
                         with b:
                             if st.button(
                                 "❌ Reject",
@@ -1493,36 +2063,32 @@ def show_admin_expenses_procurement(admin_id):
                                 use_container_width=True,
                             ):
                                 ok, msg = review_expense(
-                                    row["id"],
-                                    admin_id,
-                                    "Rejected",
-                                    note,
+                                    row["id"], admin_id, "Rejected", note
                                 )
                                 (st.success if ok else st.error)(msg)
                                 if ok:
                                     st.rerun()
 
     # --------------------------------------------------------
-    # PROCUREMENT REVIEW
+    # PROCUREMENT REVIEW + ACTUAL PURCHASE
     # --------------------------------------------------------
-    with tabs[1]:
+    with tabs[2]:
         status_filter = st.selectbox(
             "Procurement Status",
             ["All", "Pending", "Approved", "Rejected"],
             key="admin_procurement_status",
         )
-
         rows = purchase_requests(status=status_filter)
 
         if not rows:
             st.info("No purchase requests found.")
         else:
             for row in rows:
-                total = (
-                    row["quantity"]
-                    * row["estimated_unit_cost"]
+                estimated_total = row["quantity"] * row["estimated_unit_cost"]
+                actual_exists = bool(
+                    row["actual_quantity"] is not None
+                    if "actual_quantity" in row.keys() else False
                 )
-
                 icon = {
                     "Pending": "🟡",
                     "Approved": "🟢",
@@ -1530,63 +2096,33 @@ def show_admin_expenses_procurement(admin_id):
                 }.get(row["status"], "⚪")
 
                 with st.expander(
-                    f"{icon} #{row['id']} — "
-                    f"{row['full_name']} — "
-                    f"{row['item_name']}"
+                    f"{icon} #{row['id']} — {row['full_name']} — {row['item_name']}"
                 ):
-                    st.write(
-                        f"**Staff:** {row['full_name']} "
-                        f"(@{row['username']})"
-                    )
-                    st.write(
-                        f"**Category:** {row['category']}"
-                    )
-                    st.write(
-                        f"**Item:** {row['item_name']}"
-                    )
-                    st.write(
-                        f"**Quantity:** "
-                        f"{row['quantity']:g} {row['unit']}"
-                    )
+                    st.write(f"**Staff:** {row['full_name']} (@{row['username']})")
+                    st.write(f"**Category:** {row['category']}")
+                    st.write(f"**Item:** {row['item_name']}")
+                    st.write(f"**Quantity:** {row['quantity']:g} {row['unit']}")
                     st.write(
                         f"**Estimated Unit Cost:** "
-                        f"{row['estimated_unit_cost']:,.2f} "
-                        f"{row['currency']}"
+                        f"{row['estimated_unit_cost']:,.2f} {row['currency']}"
                     )
                     st.write(
                         f"**Estimated Total:** "
-                        f"**{total:,.2f} {row['currency']}**"
+                        f"**{estimated_total:,.2f} {row['currency']}**"
                     )
-
                     if row["supplier"]:
-                        st.write(
-                            f"**Preferred Supplier:** "
-                            f"{row['supplier']}"
-                        )
-
+                        st.write(f"**Preferred Supplier:** {row['supplier']}")
                     if row["required_by"]:
-                        st.write(
-                            f"**Required By:** "
-                            f"{row['required_by']}"
-                        )
-
-                    st.write(
-                        f"**Justification:** "
-                        f"{row['justification']}"
-                    )
-
-                    st.write(
-                        f"**Status:** {row['status']}"
-                    )
+                        st.write(f"**Required By:** {row['required_by']}")
+                    st.write(f"**Justification:** {row['justification']}")
+                    st.write(f"**Status:** {row['status']}")
 
                     if row["status"] == "Pending":
                         note = st.text_area(
                             "Review Note",
                             key=f"procurement_note_{row['id']}",
                         )
-
                         a, b = st.columns(2)
-
                         with a:
                             if st.button(
                                 "✅ Approve",
@@ -1594,15 +2130,11 @@ def show_admin_expenses_procurement(admin_id):
                                 use_container_width=True,
                             ):
                                 ok, msg = review_purchase_request(
-                                    row["id"],
-                                    admin_id,
-                                    "Approved",
-                                    note,
+                                    row["id"], admin_id, "Approved", note
                                 )
                                 (st.success if ok else st.error)(msg)
                                 if ok:
                                     st.rerun()
-
                         with b:
                             if st.button(
                                 "❌ Reject",
@@ -1610,135 +2142,167 @@ def show_admin_expenses_procurement(admin_id):
                                 use_container_width=True,
                             ):
                                 ok, msg = review_purchase_request(
+                                    row["id"], admin_id, "Rejected", note
+                                )
+                                (st.success if ok else st.error)(msg)
+                                if ok:
+                                    st.rerun()
+
+                    elif row["status"] == "Approved":
+                        st.divider()
+                        st.subheader("🧾 Record Actual Purchase")
+
+                        if actual_exists:
+                            actual_total = (
+                                (row["actual_quantity"] or 0)
+                                * (row["actual_unit_cost"] or 0)
+                            )
+                            st.success(
+                                f"Recorded in Finance Ledger: "
+                                f"{actual_total:,.2f} {row['currency']} "
+                                f"on {row['actual_purchase_date']}"
+                            )
+                            if row["actual_receipt_reference"]:
+                                st.caption(
+                                    f"Receipt: {row['actual_receipt_reference']}"
+                                )
+                        else:
+                            with st.form(f"actual_purchase_{row['id']}"):
+                                a, b, c = st.columns(3)
+                                actual_qty = a.number_input(
+                                    "Actual Quantity",
+                                    min_value=0.001,
+                                    value=float(row["quantity"]),
+                                    step=1.0,
+                                )
+                                actual_unit = b.number_input(
+                                    "Actual Unit Cost",
+                                    min_value=0.0,
+                                    value=float(row["estimated_unit_cost"]),
+                                    step=1000.0,
+                                    format="%.2f",
+                                )
+                                purchase_date = c.date_input(
+                                    "Purchase Date",
+                                    value=date.today(),
+                                    max_value=date.today(),
+                                )
+                                payment_method = st.selectbox(
+                                    "Payment Method",
+                                    [
+                                        "Cash",
+                                        "Bank Transfer",
+                                        "Mobile Money",
+                                        "Card",
+                                        "Cheque",
+                                        "Other",
+                                    ],
+                                    key=f"payment_method_{row['id']}",
+                                )
+                                receipt = st.text_input(
+                                    "Receipt / Invoice Number",
+                                    key=f"actual_receipt_{row['id']}",
+                                )
+                                notes = st.text_area(
+                                    "Purchase Notes",
+                                    key=f"actual_notes_{row['id']}",
+                                )
+                                save_actual = st.form_submit_button(
+                                    "💾 Record Actual Purchase & Post to Ledger",
+                                    use_container_width=True,
+                                    type="primary",
+                                )
+
+                            if save_actual:
+                                ok, msg = record_actual_purchase(
                                     row["id"],
                                     admin_id,
-                                    "Rejected",
-                                    note,
+                                    actual_qty,
+                                    actual_unit,
+                                    purchase_date,
+                                    payment_method,
+                                    receipt,
+                                    notes,
                                 )
                                 (st.success if ok else st.error)(msg)
                                 if ok:
                                     st.rerun()
 
     # --------------------------------------------------------
-    # REPORTS
+    # REPORTS / EXPORT
     # --------------------------------------------------------
-    with tabs[2]:
-        st.subheader("📊 Expense Report")
+    with tabs[3]:
+        st.subheader("📋 Finance Reports & Export")
+        ensure_ledger_from_approved_expenses()
 
-        all_expenses = expense_claims()
+        report_year = st.selectbox(
+            "Year", list(range(date.today().year - 5, date.today().year + 1)),
+            index=5, key="export_report_year"
+        )
+        rows = ledger_rows(
+            start_date=date(report_year, 1, 1),
+            end_date=date(report_year, 12, 31),
+        )
+        totals = ledger_totals(rows)
 
-        if all_expenses:
-            expense_data = [{
-                "ID": r["id"],
-                "Staff": r["full_name"],
-                "Category": r["category"],
-                "Amount": r["amount"],
-                "Currency": r["currency"],
-                "Date": r["expense_date"],
-                "Status": r["status"],
-                "Description": r["description"],
-            } for r in all_expenses]
+        if totals:
+            st.write("### Automatic Year Totals")
+            for cur, total in sorted(totals.items()):
+                st.metric(cur, f"{total:,.0f}")
 
+        if rows:
             st.dataframe(
-                expense_data,
+                [{
+                    "Date": r["transaction_date"],
+                    "Type": r["transaction_type"],
+                    "Category": r["category"],
+                    "Item / Purpose": r["item_description"],
+                    "Amount": r["amount"],
+                    "Currency": r["currency"],
+                    "Payment": r["payment_method"],
+                    "Supplier": r["supplier"] or "",
+                    "Receipt": r["receipt_reference"] or "",
+                    "Staff": r["full_name"] or "",
+                } for r in rows],
                 use_container_width=True,
                 hide_index=True,
             )
 
-            st.download_button(
-                "⬇️ Export Expense Claims CSV",
-                data=rows_to_csv(
-                    all_expenses,
-                    [
-                        "id",
-                        "full_name",
-                        "category",
-                        "amount",
-                        "currency",
-                        "expense_date",
-                        "status",
-                        "description",
-                        "receipt_reference",
-                        "submitted_at",
-                        "reviewed_by",
-                        "reviewed_at",
-                        "review_note",
-                    ],
-                ),
-                file_name="pan_ideate_expense_claims.csv",
-                mime="text/csv",
-                use_container_width=True,
-            )
+            if has_finance_permission(admin_id, "can_export_reports"):
+                st.download_button(
+                    "⬇️ Download Complete Finance Ledger",
+                    data=ledger_to_csv(rows),
+                    file_name=f"pan_ideate_finance_{report_year}.csv",
+                    mime="text/csv",
+                    use_container_width=True,
+                )
+
+                st.download_button(
+                    "⬇️ Download Expense Claims",
+                    data=rows_to_csv(
+                        expense_claims(),
+                        [
+                            "id", "full_name", "category", "amount", "currency",
+                            "expense_date", "status", "description",
+                            "receipt_reference", "submitted_at",
+                            "reviewed_by", "reviewed_at", "review_note",
+                        ],
+                    ),
+                    file_name="pan_ideate_expense_claims.csv",
+                    mime="text/csv",
+                    use_container_width=True,
+                )
         else:
-            st.info("No expense records available.")
+            st.info("No finance ledger records available for this year.")
 
-        st.divider()
-        st.subheader("📊 Procurement Report")
-
-        all_procurement = purchase_requests()
-
-        if all_procurement:
-            procurement_data = [{
-                "ID": r["id"],
-                "Staff": r["full_name"],
-                "Category": r["category"],
-                "Item": r["item_name"],
-                "Quantity": r["quantity"],
-                "Unit": r["unit"],
-                "Unit Cost": r["estimated_unit_cost"],
-                "Currency": r["currency"],
-                "Estimated Total": (
-                    r["quantity"]
-                    * r["estimated_unit_cost"]
-                ),
-                "Supplier": r["supplier"],
-                "Required By": r["required_by"],
-                "Status": r["status"],
-            } for r in all_procurement]
-
-            st.dataframe(
-                procurement_data,
-                use_container_width=True,
-                hide_index=True,
-            )
-
-            st.download_button(
-                "⬇️ Export Procurement CSV",
-                data=rows_to_csv(
-                    all_procurement,
-                    [
-                        "id",
-                        "full_name",
-                        "category",
-                        "item_name",
-                        "quantity",
-                        "unit",
-                        "estimated_unit_cost",
-                        "currency",
-                        "supplier",
-                        "justification",
-                        "required_by",
-                        "status",
-                        "submitted_at",
-                        "reviewed_by",
-                        "reviewed_at",
-                        "review_note",
-                    ],
-                ),
-                file_name="pan_ideate_procurement_requests.csv",
-                mime="text/csv",
-                use_container_width=True,
-            )
-        else:
-            st.info("No procurement records available.")
-
-
+    # --------------------------------------------------------
+    # SUPER ADMIN TOOLS
+    # --------------------------------------------------------
     if admin["role"] == "Super Admin":
-        with tabs[3]:
-            show_suppliers(admin_id)
         with tabs[4]:
+            show_suppliers(admin_id)
+        with tabs[5]:
             show_finance_access_control(admin_id)
-
 
 
 # ============================================================
