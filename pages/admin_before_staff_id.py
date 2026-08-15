@@ -40,7 +40,6 @@ from pages.approval_centre import show_approval_centre
 from pages.expenses_procurement import show_admin_expenses_procurement
 from pages.admin_access_control import show_access_control, has_module_access, is_super_admin, init_access_control
 from pages.audit_log import show_audit_log, log_audit_event
-from pages.digital_staff_id import show_digital_id_centre, ensure_staff_id_fields
 
 # ============================================================
 # PAN IDEATE AFRICA
@@ -198,7 +197,6 @@ def show_admin():
         ("donations", "❤️ Donation Requests"),
         ("staff_management", "👥 Staff Management"),
         ("staff_directory", "👥 Staff Directory"),
-        ("digital_staff_id", "🪪 Digital Staff ID & Verification"),
         ("leave_attendance", "🕘 Leave & Attendance"),
         ("expenses_procurement", "💰 Expenses & Procurement"),
         ("tasks", "📋 Task & Project Manager"),
@@ -609,7 +607,6 @@ def show_admin():
         shortcuts = st.columns(5)
         shortcut_labels = [
             "👥 Staff Directory",
-            "🪪 Digital Staff ID",
             "🕘 Leave & Attendance",
             "📋 Tasks",
             "📅 Meetings",
@@ -624,7 +621,6 @@ def show_admin():
         ]
         shortcut_targets = [
             "👥 Staff Directory",
-            "🪪 Digital Staff ID & Verification",
             "🕘 Leave & Attendance",
             "📋 Task & Project Manager",
             "📅 Meeting Centre",
@@ -1467,21 +1463,6 @@ def show_admin():
             st.info(
                 "No reviewed donations yet."
             )
-
-    # ========================================================
-    # DIGITAL STAFF ID & VERIFICATION
-    # ========================================================
-
-    elif admin_option == "🪪 Digital Staff ID & Verification":
-
-        if not current_is_super_admin:
-            st.error("🔒 Only the Super Admin can administer Digital Staff IDs and entrance verification.")
-        else:
-            try:
-                ensure_staff_id_fields()
-                show_digital_id_centre(current_operator_id=current_operator_id, super_admin=True)
-            except Exception as error:
-                st.error(f"Unable to open Digital Staff ID Centre: {error}")
 
     # ========================================================
     # STAFF DIRECTORY
