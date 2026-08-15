@@ -27,7 +27,13 @@ from pages.task_manager import show_admin_task_manager
 from pages.document_centre import show_admin_document_centre
 from pages.leave_attendance import show_admin_leave_attendance
 from pages.staff_directory import show_admin_staff_directory
-from pages.staff_login import init_database as init_staff_database, create_initial_admin, authenticate
+from pages.staff_login import (
+    init_database as init_staff_database,
+    create_initial_admin,
+    authenticate,
+    show_confidential_concerns_admin,
+    show_staff_voice_analytics,
+)
 from pages.ai_staff_assistant import show_admin_ai_staff_assistant
 from pages.meeting_centre import show_admin_meeting_centre
 from pages.approval_centre import show_approval_centre
@@ -200,13 +206,22 @@ def show_admin():
         ("ai_assistant", "🤖 AI Staff Assistant"),
         ("meetings", "📅 Meeting Centre"),
         ("approvals", "✅ Approval Centre"),
+        ("staff_voice", "🔒 Staff Voice & Confidential Cases"),
         ("audit_log", "🔐 Audit & Activity Log"),
         ("documents", "📁 Document Centre"),
         ("innovation", "💡 Innovation Ideas"),
         ("learning", "🎓 Learning Centre"),
         ("knowledge_hub", "📚 Knowledge Hub"),
     ]
-    permitted_areas = [label for key, label in all_admin_areas if current_is_super_admin or has_module_access(current_operator_id, key)]
+    permitted_areas = [
+        label
+        for key, label in all_admin_areas
+        if (
+            current_is_super_admin
+            if key == "staff_voice"
+            else (current_is_super_admin or has_module_access(current_operator_id, key))
+        )
+    ]
     admin_choices = ["Dashboard"] + permitted_areas
     if current_is_super_admin:
         admin_choices.append("🛡️ Staff Module Access Control")
@@ -601,6 +616,7 @@ def show_admin():
             "📁 Documents",
             "🤖 AI Assistant",
             "🔔 Notifications",
+            "🔒 Staff Voice",
             "🔐 Audit Log",
         ]
         shortcut_targets = [
@@ -614,6 +630,7 @@ def show_admin():
             "📁 Document Centre",
             "🤖 AI Staff Assistant",
             "🔔 Notification Centre",
+            "🔒 Staff Voice & Confidential Cases",
             "🔐 Audit & Activity Log",
         ]
 
@@ -2169,6 +2186,32 @@ def show_admin():
             "Learning Centre administration will be "
             "connected in a later stage."
         )
+
+    elif admin_option == "🔒 Staff Voice & Confidential Cases":
+        # Staff Voice is intentionally Super-Admin-only because this view
+        # can reveal the identity of confidential reporters.
+        if not current_is_super_admin:
+            st.error("🔒 Only the Super Admin can access confidential Staff Voice case management.")
+        else:
+            connection = get_connection()
+            admin_staff = connection.execute(
+                """
+                SELECT *
+                FROM staff_users
+                WHERE id = ?
+                  AND status = 'Active'
+                LIMIT 1
+                """,
+                (current_operator_id,),
+            ).fetchone()
+            connection.close()
+
+            if not admin_staff:
+                st.error("The active Super Admin staff account could not be found.")
+            else:
+                show_confidential_concerns_admin(admin_staff)
+                st.divider()
+                show_staff_voice_analytics(admin_staff)
 
     elif admin_option == "🔐 Audit & Activity Log":
 
