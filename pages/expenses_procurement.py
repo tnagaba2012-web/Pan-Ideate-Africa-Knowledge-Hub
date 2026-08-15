@@ -6,6 +6,26 @@ import io
 import streamlit as st
 
 try:
+    from utils.approval_engine import (
+        init_approval_engine,
+        get_authority_profile,
+        get_active_staff as get_active_approval_staff,
+        can_review_request,
+        is_super_admin,
+    )
+except Exception:
+    init_approval_engine = None
+    get_authority_profile = None
+    get_active_approval_staff = None
+    can_review_request = None
+    is_super_admin = None
+
+try:
+    from pages.audit_log import log_audit_event as shared_audit_event
+except Exception:
+    shared_audit_event = None
+
+try:
     from pages.notification_centre import create_notification
 except Exception:
     create_notification = None
@@ -157,6 +177,56 @@ def init_database():
         ON purchase_requests(staff_id)
     """)
 
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS finance_permissions (
+            staff_id INTEGER PRIMARY KEY,
+            can_submit_expense INTEGER NOT NULL DEFAULT 1,
+            can_submit_procurement INTEGER NOT NULL DEFAULT 1,
+            can_review_expenses INTEGER NOT NULL DEFAULT 0,
+            can_review_procurement INTEGER NOT NULL DEFAULT 0,
+            can_view_reports INTEGER NOT NULL DEFAULT 0,
+            can_export_reports INTEGER NOT NULL DEFAULT 0,
+            can_manage_suppliers INTEGER NOT NULL DEFAULT 0,
+            updated_by INTEGER,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS finance_suppliers (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            supplier_name TEXT NOT NULL UNIQUE,
+            contact_person TEXT,
+            phone TEXT,
+            email TEXT,
+            address TEXT,
+            category TEXT,
+            status TEXT NOT NULL DEFAULT 'Active',
+            notes TEXT,
+            created_by INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+    active_people = cur.execute(
+        "SELECT id, role FROM staff_users WHERE status = 'Active'"
+    ).fetchall()
+    for person in active_people:
+        reviewer = 1 if person["role"] in APPROVER_ROLES else 0
+        cur.execute("""
+            INSERT OR IGNORE INTO finance_permissions (
+                staff_id, can_submit_expense, can_submit_procurement,
+                can_review_expenses, can_review_procurement,
+                can_view_reports, can_export_reports, can_manage_suppliers
+            ) VALUES (?, 1, 1, ?, ?, ?, ?, ?)
+        """, (
+            person["id"], reviewer, reviewer,
+            1 if person["role"] in {"Super Admin", "Administrator", "Finance"} else 0,
+            1 if person["role"] in {"Super Admin", "Administrator", "Finance"} else 0,
+            1 if person["role"] in {"Super Admin", "Administrator", "Finance"} else 0,
+        ))
+
     con.commit()
     con.close()
 
@@ -268,6 +338,252 @@ def audit(record_type, record_id, staff_id, actor_id, action, details=""):
 
 
 # ============================================================
+# ADVANCED FINANCE & PROCUREMENT CONTROLS
+# ============================================================
+
+def get_finance_permissions(staff_id):
+    init_database()
+    con = db()
+    row = con.execute(
+        "SELECT * FROM finance_permissions WHERE staff_id = ? LIMIT 1",
+        (staff_id,),
+    ).fetchone()
+    con.close()
+    return row
+
+
+def has_finance_permission(staff_id, permission):
+    person = get_staff(staff_id)
+    if not person or person["status"] != "Active":
+        return False
+    if person["role"] == "Super Admin":
+        return True
+    row = get_finance_permissions(staff_id)
+    return bool(row and row[permission])
+
+
+def save_finance_permissions(staff_id, updated_by, values):
+    if is_super_admin and not is_super_admin(updated_by):
+        return False, "Only the Super Admin can change Finance & Procurement access."
+    init_database()
+    con = db()
+    con.execute("""
+        INSERT INTO finance_permissions (
+            staff_id, can_submit_expense, can_submit_procurement,
+            can_review_expenses, can_review_procurement,
+            can_view_reports, can_export_reports, can_manage_suppliers,
+            updated_by, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(staff_id) DO UPDATE SET
+            can_submit_expense=excluded.can_submit_expense,
+            can_submit_procurement=excluded.can_submit_procurement,
+            can_review_expenses=excluded.can_review_expenses,
+            can_review_procurement=excluded.can_review_procurement,
+            can_view_reports=excluded.can_view_reports,
+            can_export_reports=excluded.can_export_reports,
+            can_manage_suppliers=excluded.can_manage_suppliers,
+            updated_by=excluded.updated_by,
+            updated_at=CURRENT_TIMESTAMP
+    """, (
+        staff_id,
+        int(values["can_submit_expense"]),
+        int(values["can_submit_procurement"]),
+        int(values["can_review_expenses"]),
+        int(values["can_review_procurement"]),
+        int(values["can_view_reports"]),
+        int(values["can_export_reports"]),
+        int(values["can_manage_suppliers"]),
+        updated_by,
+    ))
+    con.commit()
+    con.close()
+    return True, "Finance & Procurement permissions saved."
+
+
+def finance_summary():
+    con = db()
+    result = {
+        "pending_expenses": con.execute(
+            "SELECT COUNT(*) FROM expense_claims WHERE status='Pending'"
+        ).fetchone()[0],
+        "approved_expenses": con.execute(
+            "SELECT COALESCE(SUM(amount),0) FROM expense_claims WHERE status='Approved'"
+        ).fetchone()[0],
+        "pending_procurement": con.execute(
+            "SELECT COUNT(*) FROM purchase_requests WHERE status='Pending'"
+        ).fetchone()[0],
+        "approved_procurement": con.execute(
+            "SELECT COALESCE(SUM(quantity*estimated_unit_cost),0) FROM purchase_requests WHERE status='Approved'"
+        ).fetchone()[0],
+        "rejected_expenses": con.execute(
+            "SELECT COUNT(*) FROM expense_claims WHERE status='Rejected'"
+        ).fetchone()[0],
+        "rejected_procurement": con.execute(
+            "SELECT COUNT(*) FROM purchase_requests WHERE status='Rejected'"
+        ).fetchone()[0],
+        "active_suppliers": con.execute(
+            "SELECT COUNT(*) FROM finance_suppliers WHERE status='Active'"
+        ).fetchone()[0],
+    }
+    con.close()
+    return result
+
+
+def supplier_rows(search="", status="All"):
+    init_database()
+    con = db()
+    clauses=[]
+    params=[]
+    if status != "All":
+        clauses.append("status = ?")
+        params.append(status)
+    if search.strip():
+        q=f"%{search.strip()}%"
+        clauses.append("(supplier_name LIKE ? OR contact_person LIKE ? OR phone LIKE ? OR email LIKE ? OR category LIKE ?)")
+        params.extend([q,q,q,q,q])
+    where=" WHERE " + " AND ".join(clauses) if clauses else ""
+    rows=con.execute(
+        f"SELECT * FROM finance_suppliers{where} ORDER BY supplier_name COLLATE NOCASE",
+        params,
+    ).fetchall()
+    con.close()
+    return rows
+
+
+def save_supplier(supplier_name, contact_person, phone, email, address, category, status, notes, created_by):
+    if not supplier_name.strip():
+        return False, "Supplier name is required."
+    init_database()
+    con=db()
+    try:
+        con.execute("""
+            INSERT INTO finance_suppliers
+            (supplier_name, contact_person, phone, email, address, category, status, notes, created_by)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (supplier_name.strip(), contact_person.strip(), phone.strip(), email.strip(), address.strip(), category.strip(), status, notes.strip(), created_by))
+        con.commit()
+        con.close()
+        return True, "Supplier saved successfully."
+    except sqlite3.IntegrityError:
+        con.close()
+        return False, "A supplier with that name already exists."
+
+
+def _review_permission(staff_id, source_type, source_id):
+    required = "can_review_expenses" if source_type == "expense" else "can_review_procurement"
+    if not has_finance_permission(staff_id, required):
+        return False, "You have not been granted this review permission."
+    if can_review_request:
+        return can_review_request(staff_id, source_type, source_id)
+    return is_approver(staff_id), ""
+
+
+def _audit_finance(action, summary, actor_id, severity="INFO", target_type=None, target_id=None):
+    try:
+        if shared_audit_event:
+            actor = get_staff(actor_id)
+            return shared_audit_event(
+                "Finance & Procurement",
+                action,
+                summary,
+                actor_id=actor_id,
+                actor_name=actor["full_name"] if actor else "System",
+                actor_role=actor["role"] if actor else None,
+                severity=severity,
+                target_type=target_type,
+                target_id=str(target_id) if target_id is not None else None,
+            )
+    except Exception:
+        pass
+    return None
+
+
+def show_finance_access_control(admin_id):
+    if not (is_super_admin and is_super_admin(admin_id)):
+        st.error("🔒 Only the Super Admin can assign Finance & Procurement access.")
+        return
+    if init_approval_engine:
+        init_approval_engine()
+    st.subheader("🔐 Finance & Procurement Access Control")
+    st.caption("The Super Admin can choose exactly which staff members may submit, review, report on, or manage Finance & Procurement.")
+    staff = get_active_approval_staff() if get_active_approval_staff else get_active_staff()
+    options = {f"{p['full_name']} (@{p['username']}) — {p['role']}": p["id"] for p in staff}
+    if not options:
+        st.info("No active staff members are available.")
+        return
+    selected = st.selectbox("Staff Member", list(options), key="finance_permission_staff")
+    staff_id = options[selected]
+    current = get_finance_permissions(staff_id)
+    profile = get_authority_profile(staff_id) if get_authority_profile else None
+    with st.form("finance_permission_form"):
+        left,right=st.columns(2)
+        with left:
+            can_submit_expense=st.checkbox("Submit expense claims", value=bool(current["can_submit_expense"]) if current else True)
+            can_submit_procurement=st.checkbox("Submit procurement requests", value=bool(current["can_submit_procurement"]) if current else True)
+            can_review_expenses=st.checkbox("Review / approve expenses", value=bool(current["can_review_expenses"]) if current else False)
+            can_review_procurement=st.checkbox("Review / approve procurement", value=bool(current["can_review_procurement"]) if current else False)
+        with right:
+            can_view_reports=st.checkbox("View finance reports", value=bool(current["can_view_reports"]) if current else False)
+            can_export_reports=st.checkbox("Export finance reports", value=bool(current["can_export_reports"]) if current else False)
+            can_manage_suppliers=st.checkbox("Manage suppliers", value=bool(current["can_manage_suppliers"]) if current else False)
+            st.markdown("**Approval Authority**")
+            if profile:
+                st.write(str(profile["authority_level"]))
+                expense_limit = "Unlimited" if profile["expense_limit"] == -1 else f"{profile['expense_limit']:,.0f} {profile['expense_currency']}"
+                proc_limit = "Unlimited" if profile["procurement_limit"] == -1 else f"{profile['procurement_limit']:,.0f} {profile['procurement_currency']}"
+                st.caption(f"Expense approval limit: {expense_limit}")
+                st.caption(f"Procurement approval limit: {proc_limit}")
+            else:
+                st.info("Approval Authority Profile not configured yet.")
+        save=st.form_submit_button("💾 Save Finance Permissions", use_container_width=True, type="primary")
+    if save:
+        ok,msg=save_finance_permissions(staff_id,admin_id,{"can_submit_expense":can_submit_expense,"can_submit_procurement":can_submit_procurement,"can_review_expenses":can_review_expenses,"can_review_procurement":can_review_procurement,"can_view_reports":can_view_reports,"can_export_reports":can_export_reports,"can_manage_suppliers":can_manage_suppliers})
+        (st.success if ok else st.error)(msg)
+        if ok:
+            _audit_finance("PERMISSIONS_UPDATED", f"Finance permissions updated for {selected}", admin_id, "HIGH", "staff", staff_id)
+            st.rerun()
+
+
+def show_suppliers(admin_id):
+    if not has_finance_permission(admin_id,"can_manage_suppliers"):
+        st.error("🔒 Supplier management permission required.")
+        return
+    st.subheader("🏢 Supplier Directory")
+    st.caption("Maintain a controlled list of suppliers for procurement requests.")
+    with st.form("add_supplier_form"):
+        c1,c2=st.columns(2)
+        name=c1.text_input("Supplier Name")
+        contact=c2.text_input("Contact Person")
+        c1,c2=st.columns(2)
+        phone=c1.text_input("Phone")
+        email=c2.text_input("Email")
+        address=st.text_input("Address")
+        category=st.text_input("Category")
+        status=st.selectbox("Status",["Active","Inactive"])
+        notes=st.text_area("Notes")
+        save=st.form_submit_button("💾 Save Supplier", use_container_width=True)
+    if save:
+        ok,msg=save_supplier(name,contact,phone,email,address,category,status,notes,admin_id)
+        (st.success if ok else st.error)(msg)
+        if ok:
+            _audit_finance("SUPPLIER_CREATED", f"Supplier created: {name.strip()}", admin_id, "INFO", "supplier", name.strip())
+            st.rerun()
+    search=st.text_input("🔎 Search suppliers", key="supplier_search")
+    status_filter=st.selectbox("Supplier Status",["All","Active","Inactive"],key="supplier_status")
+    rows=supplier_rows(search,status_filter)
+    st.caption(f"{len(rows)} supplier(s) found")
+    for row in rows:
+        with st.container(border=True):
+            c1,c2=st.columns([3,1])
+            c1.markdown(f"### 🏢 {row['supplier_name']}")
+            c1.caption(f"{row['contact_person'] or 'No contact'} • {row['phone'] or 'No phone'} • {row['email'] or 'No email'}")
+            c2.write(f"**{row['status']}**")
+            st.write(f"**Category:** {row['category'] or 'Not specified'}")
+            st.caption(row["address"] or "No address recorded")
+            if row["notes"]:
+                st.caption(f"Notes: {row['notes']}")
+
+# ============================================================
 # VALIDATION
 # ============================================================
 
@@ -308,6 +624,8 @@ def submit_expense(
 
     if not person or person["status"] != "Active":
         return False, "Active staff account required."
+    if not has_finance_permission(staff_id, "can_submit_expense"):
+        return False, "You have not been granted permission to submit expense claims."
 
     amount = clean_amount(amount)
     if amount is None:
@@ -404,7 +722,7 @@ def review_expense(claim_id, admin_id, decision, note=""):
         record_approval_decision,
     )
 
-    allowed, message = can_review_request(
+    allowed, message = _review_permission(
         admin_id,
         "expense",
         claim_id,
@@ -506,6 +824,8 @@ def submit_purchase_request(
 
     if not person or person["status"] != "Active":
         return False, "Active staff account required."
+    if not has_finance_permission(staff_id, "can_submit_procurement"):
+        return False, "You have not been granted permission to submit procurement requests."
 
     if not item_name.strip():
         return False, "Please enter the item or service required."
@@ -623,7 +943,7 @@ def review_purchase_request(
         record_approval_decision,
     )
 
-    allowed, message = can_review_request(
+    allowed, message = _review_permission(
         admin_id,
         "procurement",
         request_id,
@@ -1079,11 +1399,10 @@ def show_admin_expenses_procurement(admin_id):
 
     st.divider()
 
-    tabs = st.tabs([
-        "💰 Expense Claims",
-        "🛒 Procurement",
-        "📊 Reports",
-    ])
+    tab_labels = ["💰 Expense Claims", "🛒 Procurement", "📊 Reports"]
+    if admin["role"] == "Super Admin":
+        tab_labels.extend(["🏢 Suppliers", "🔐 Access Control"])
+    tabs = st.tabs(tab_labels)
 
     # --------------------------------------------------------
     # EXPENSE REVIEW
@@ -1412,6 +1731,14 @@ def show_admin_expenses_procurement(admin_id):
             )
         else:
             st.info("No procurement records available.")
+
+
+    if admin["role"] == "Super Admin":
+        with tabs[3]:
+            show_suppliers(admin_id)
+        with tabs[4]:
+            show_finance_access_control(admin_id)
+
 
 
 # ============================================================

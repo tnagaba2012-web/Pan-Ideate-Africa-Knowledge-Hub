@@ -26,12 +26,13 @@ from pages.notification_centre import (
 from pages.task_manager import show_admin_task_manager
 from pages.document_centre import show_admin_document_centre
 from pages.leave_attendance import show_admin_leave_attendance
-from pages.expenses_procurement import show_admin_expenses_procurement
 from pages.staff_directory import show_admin_staff_directory
-from pages.staff_login import init_database as init_staff_database, create_initial_admin
+from pages.staff_login import init_database as init_staff_database, create_initial_admin, authenticate
 from pages.ai_staff_assistant import show_admin_ai_staff_assistant
 from pages.meeting_centre import show_admin_meeting_centre
 from pages.approval_centre import show_approval_centre
+from pages.expenses_procurement import show_admin_expenses_procurement
+from pages.admin_access_control import show_access_control, has_module_access, is_super_admin, init_access_control
 from pages.audit_log import show_audit_log, log_audit_event
 
 # ============================================================
@@ -51,6 +52,8 @@ def _dashboard_shortcut(target):
 
 def show_admin():
 
+    init_access_control()
+
     st.title("🔐 Pan Ideate Africa Admin")
 
     st.info(
@@ -63,36 +66,79 @@ def show_admin():
     # ADMIN LOGIN
     # ========================================================
 
-    st.subheader("🔑 Administrator Login")
+    st.subheader("🔑 Administration Login")
 
-    password = st.text_input(
-        "Enter administrator password",
-        type="password",
-        key="admin_password"
+    access_mode = st.radio(
+        "Access mode",
+        ["👑 Super Admin", "👤 Delegated Staff Operator"],
+        horizontal=True,
+        key="admin_access_mode",
     )
 
-    admin_password = os.getenv("ADMIN_PASSWORD")
+    current_operator_id = None
+    current_is_super_admin = False
 
-    if not admin_password:
-
-        st.warning(
-            "Administrator password has not been configured yet."
+    if access_mode == "👑 Super Admin":
+        password = st.text_input(
+            "Enter administrator password",
+            type="password",
+            key="admin_password"
         )
 
-        st.caption(
-            "Configure ADMIN_PASSWORD before launching the "
-            "Administration Centre."
+        admin_password = os.getenv("ADMIN_PASSWORD")
+
+        if not admin_password:
+            st.warning("Administrator password has not been configured yet.")
+            st.caption("Configure ADMIN_PASSWORD before launching the Administration Centre.")
+            return
+
+        if password != admin_password:
+            st.info("Enter the Super Admin password to continue.")
+            return
+
+        connection = get_connection()
+        row = connection.execute("""
+            SELECT id FROM staff_users
+            WHERE LOWER(username) = 'admin' AND status = 'Active'
+            LIMIT 1
+        """).fetchone()
+        connection.close()
+        current_operator_id = row["id"] if row else None
+        current_is_super_admin = True
+        st.success("Super Admin access granted — all Administration Centre functions are available.")
+
+    else:
+        operator_username = st.text_input("Staff Username", key="delegated_operator_username")
+        operator_password = st.text_input("Staff Password", type="password", key="delegated_operator_password")
+        if not operator_username or not operator_password:
+            st.info("Enter the staff member's own login credentials.")
+            return
+        staff = authenticate(operator_username, operator_password)
+        if not staff:
+            st.error("Invalid staff username or password.")
+            return
+        current_operator_id = staff["id"]
+        current_is_super_admin = is_super_admin(current_operator_id)
+        if current_is_super_admin:
+            st.success(f"Welcome, {staff['full_name']} — Super Admin access.")
+        elif not any(has_module_access(current_operator_id, key) for key, _, _ in __import__('pages.admin_access_control', fromlist=['MODULES']).MODULES):
+            st.warning("This staff member has not been assigned any Administration Centre functions yet.")
+            return
+        else:
+            st.success(f"Delegated Administration access granted to {staff['full_name']}.")
+
+    # Record successful administrator/delegated-operator login.
+    try:
+        log_audit_event(
+            "Administration",
+            "LOGIN",
+            "Administration Centre access granted.",
+            actor_name=("PAN IDEATE AFRICA ADMINISTRATOR" if current_is_super_admin else "Delegated Staff Operator"),
+            actor_role=("Super Admin" if current_is_super_admin else "Delegated Operator"),
+            severity="INFO",
         )
-
-        return
-
-    if password != admin_password:
-
-        st.error("Incorrect password.")
-
-        return
-
-    st.success("Login successful.")
+    except Exception:
+        pass
 
     # Record one successful administrator login per active Streamlit session.
     if not st.session_state.get("admin_audit_login_recorded", False):
@@ -138,31 +184,36 @@ def show_admin():
 
     st.header("⚙️ Administration")
 
+    all_admin_areas = [
+        ("membership", "💳 Membership & Subscriptions"),
+        ("contact_messages", "📨 Contact Messages"),
+        ("partnerships", "🤝 Partnership Requests"),
+        ("donations", "❤️ Donation Requests"),
+        ("staff_management", "👥 Staff Management"),
+        ("staff_directory", "👥 Staff Directory"),
+        ("leave_attendance", "🕘 Leave & Attendance"),
+        ("expenses_procurement", "💰 Expenses & Procurement"),
+        ("tasks", "📋 Task & Project Manager"),
+        ("staff_communications", "💬 Staff Communications"),
+        ("staff_messages", "✉️ Staff Messages"),
+        ("notifications", "🔔 Notification Centre"),
+        ("ai_assistant", "🤖 AI Staff Assistant"),
+        ("meetings", "📅 Meeting Centre"),
+        ("approvals", "✅ Approval Centre"),
+        ("audit_log", "🔐 Audit & Activity Log"),
+        ("documents", "📁 Document Centre"),
+        ("innovation", "💡 Innovation Ideas"),
+        ("learning", "🎓 Learning Centre"),
+        ("knowledge_hub", "📚 Knowledge Hub"),
+    ]
+    permitted_areas = [label for key, label in all_admin_areas if current_is_super_admin or has_module_access(current_operator_id, key)]
+    admin_choices = ["Dashboard"] + permitted_areas
+    if current_is_super_admin:
+        admin_choices.append("🛡️ Staff Module Access Control")
+
     admin_option = st.selectbox(
         "Choose an administration area",
-        [
-            "Dashboard",
-            "💳 Membership & Subscriptions",
-            "📨 Contact Messages",
-            "🤝 Partnership Requests",
-            "❤️ Donation Requests",
-            "👥 Staff Management",
-            "👥 Staff Directory",
-            "🕘 Leave & Attendance",
-            "💰 Expenses & Procurement",
-            "📋 Task & Project Manager",
-            "💬 Staff Communications",
-            "✉️ Staff Messages",
-            "🔔 Notification Centre",
-            "🤖 AI Staff Assistant",
-            "📅 Meeting Centre",
-            "✅ Approval Centre",
-            "🔐 Audit & Activity Log",
-            "📁 Document Centre",
-            "💡 Innovation Ideas",
-            "🎓 Learning Centre",
-            "📚 Knowledge Hub",
-        ],
+        admin_choices,
         key="admin_area"
     )
 
@@ -583,6 +634,13 @@ def show_admin():
             "database and is designed to grow as each operational module is "
             "connected."
         )
+
+    # ========================================================
+    # STAFF MODULE ACCESS CONTROL
+    # ========================================================
+
+    elif admin_option == "🛡️ Staff Module Access Control":
+        show_access_control(current_operator_id)
 
     # ========================================================
     # MEMBERSHIP & SUBSCRIPTIONS
@@ -1732,49 +1790,10 @@ def show_admin():
             st.error(f"Unable to open Leave & Attendance: {error}")
 
     elif admin_option == "💰 Expenses & Procurement":
-        # Open the existing finance/procurement module using the central
-        # Super Admin staff account. This keeps Expenses & Procurement
-        # connected to the same staff database and approval permissions
-        # used by the rest of the Administration Centre.
-        admin_staff_id = None
-        connection = get_connection()
-        row = connection.execute("""
-            SELECT id
-            FROM staff_users
-            WHERE LOWER(username) = 'admin'
-              AND status = 'Active'
-            LIMIT 1
-        """).fetchone()
-        connection.close()
-
-        if row:
-            admin_staff_id = row["id"]
-
-        if admin_staff_id:
-            try:
-                show_admin_expenses_procurement(admin_staff_id)
-            except Exception as error:
-                st.error(f"Unable to open Expenses & Procurement: {error}")
-        else:
-            st.error("The active Super Admin staff account could not be found.")
-
-    # ========================================================
-    # TASK & PROJECT MANAGER
-    # ========================================================
+        show_admin_expenses_procurement(current_operator_id)
 
     elif admin_option == "📋 Task & Project Manager":
-        admin_staff_id = None
-        connection = get_connection()
-        row = connection.execute("""
-            SELECT id
-            FROM staff_users
-            WHERE LOWER(username) = 'admin' AND status = 'Active'
-            LIMIT 1
-        """).fetchone()
-        connection.close()
-
-        if row:
-            admin_staff_id = row["id"]
+        admin_staff_id = current_operator_id
 
         if admin_staff_id:
             show_admin_task_manager(admin_staff_id)
@@ -1793,20 +1812,7 @@ def show_admin():
     # ========================================================
 
     elif admin_option == "🔔 Notification Centre":
-        admin_staff_id = None
-
-        connection = get_connection()
-        row = connection.execute("""
-            SELECT id
-            FROM staff_users
-            WHERE LOWER(username) = 'admin'
-              AND status = 'Active'
-            LIMIT 1
-        """).fetchone()
-        connection.close()
-
-        if row:
-            admin_staff_id = row["id"]
+        admin_staff_id = current_operator_id
 
         if admin_staff_id:
             show_notification_centre(admin_staff_id)
@@ -1828,20 +1834,7 @@ def show_admin():
     # ========================================================
 
     elif admin_option == "🤖 AI Staff Assistant":
-        admin_staff_id = None
-
-        connection = get_connection()
-        row = connection.execute("""
-            SELECT id
-            FROM staff_users
-            WHERE LOWER(username) = 'admin'
-              AND status = 'Active'
-            LIMIT 1
-        """).fetchone()
-        connection.close()
-
-        if row:
-            admin_staff_id = row["id"]
+        admin_staff_id = current_operator_id
 
         if admin_staff_id:
             show_admin_ai_staff_assistant(admin_staff_id)
@@ -1855,20 +1848,7 @@ def show_admin():
     # ========================================================
 
     elif admin_option == "📅 Meeting Centre":
-        admin_staff_id = None
-
-        connection = get_connection()
-        row = connection.execute("""
-            SELECT id
-            FROM staff_users
-            WHERE LOWER(username) = 'admin'
-              AND status = 'Active'
-            LIMIT 1
-        """).fetchone()
-        connection.close()
-
-        if row:
-            admin_staff_id = row["id"]
+        admin_staff_id = current_operator_id
 
         if admin_staff_id:
             show_admin_meeting_centre(admin_staff_id)
@@ -1882,20 +1862,7 @@ def show_admin():
     # ========================================================
 
     elif admin_option == "✅ Approval Centre":
-        admin_staff_id = None
-
-        connection = get_connection()
-        row = connection.execute("""
-            SELECT id
-            FROM staff_users
-            WHERE LOWER(username) = 'admin'
-              AND status = 'Active'
-            LIMIT 1
-        """).fetchone()
-        connection.close()
-
-        if row:
-            admin_staff_id = row["id"]
+        admin_staff_id = current_operator_id
 
         if admin_staff_id:
             show_approval_centre(admin_staff_id)
@@ -1905,20 +1872,7 @@ def show_admin():
             )
 
     elif admin_option == "📁 Document Centre":
-        admin_staff_id = None
-
-        connection = get_connection()
-        row = connection.execute("""
-            SELECT id
-            FROM staff_users
-            WHERE LOWER(username) = 'admin'
-              AND status = 'Active'
-            LIMIT 1
-        """).fetchone()
-        connection.close()
-
-        if row:
-            admin_staff_id = row["id"]
+        admin_staff_id = current_operator_id
 
         if admin_staff_id:
             show_admin_document_centre(admin_staff_id)
