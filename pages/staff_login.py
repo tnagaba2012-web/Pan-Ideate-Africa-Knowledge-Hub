@@ -1,4 +1,8 @@
 import streamlit as st
+from pages.notification_centre import (
+    show_notification_centre,
+    get_notification_count,
+)
 import sqlite3
 import hashlib
 import secrets
@@ -6,6 +10,13 @@ from pathlib import Path
 from datetime import datetime
 import uuid
 import mimetypes
+from pages.document_centre import show_document_centre
+from pages.staff_directory import show_staff as show_staff_directory_v1
+from pages.ai_staff_assistant import show_staff_ai_assistant
+from pages.meeting_centre import show_staff_meeting_centre
+from pages.approval_centre import show_staff_approval_centre
+from utils.approval_engine import has_approval_access
+from pages.admin_access_control import init_access_control, has_staff_tool_access, STAFF_MODULES
 
 
 # ============================================================
@@ -18,9 +29,11 @@ DATA_DIR = BASE_DIR / "data"
 DATABASE_PATH = DATA_DIR / "pan_ideate.db"
 ATTACHMENTS_DIR = DATA_DIR / "staff_attachments"
 MAX_ATTACHMENT_SIZE = 25 * 1024 * 1024
-MAX_ATTACHMENTS_PER_MESSAGE = 5
+
+# Staff Voice keeps confidential-report attachments in a separate directory.
 STAFF_VOICE_ATTACHMENTS_DIR = DATA_DIR / "staff_voice_attachments"
 MAX_STAFF_VOICE_ATTACHMENT_SIZE = 15 * 1024 * 1024
+MAX_ATTACHMENTS_PER_MESSAGE = 5
 
 
 # ============================================================
@@ -187,6 +200,7 @@ def init_database():
             mime_type TEXT,
             file_size INTEGER NOT NULL,
             uploaded_by INTEGER NOT NULL,
+            file_data BLOB,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY(message_id) REFERENCES staff_messages(id),
             FOREIGN KEY(uploaded_by) REFERENCES staff_users(id)
@@ -194,6 +208,18 @@ def init_database():
     """)
 
     # --------------------------------------------------------
+    # ATTACHMENT STORAGE MIGRATION
+    # --------------------------------------------------------
+    cursor.execute("PRAGMA table_info(staff_message_attachments)")
+    attachment_columns = {row["name"] for row in cursor.fetchall()}
+
+    if "file_data" not in attachment_columns:
+        cursor.execute(
+            "ALTER TABLE staff_message_attachments "
+            "ADD COLUMN file_data BLOB"
+        )
+
+# --------------------------------------------------------
     # CONFIDENTIAL STAFF VOICE / CONCERNS
     # --------------------------------------------------------
     # Identity is stored for Super Admin accountability, but ordinary
@@ -242,6 +268,8 @@ def init_database():
         CREATE INDEX IF NOT EXISTS idx_staff_voice_created
         ON staff_voice_concerns(created_at DESC)
     """)
+
+
 
     connection.commit()
     connection.close()
@@ -808,58 +836,53 @@ def show_profile():
 # ============================================================
 
 def save_message_attachment(uploaded_file, message_id, uploaded_by):
-    """Save an uploaded file with a private generated filename."""
+    """Save an attachment in the database and keep a local fallback copy."""
     if uploaded_file is None:
         return None
 
     data = uploaded_file.getvalue()
     if len(data) > MAX_ATTACHMENT_SIZE:
-        raise ValueError(
-            f"{uploaded_file.name} is larger than 25 MB."
-        )
+        raise ValueError(f"{uploaded_file.name} is larger than 25 MB.")
 
     safe_suffix = Path(uploaded_file.name).suffix.lower()
     stored_name = f"{uuid.uuid4().hex}{safe_suffix}"
-    destination = ATTACHMENTS_DIR / stored_name
-    destination.write_bytes(data)
+    (ATTACHMENTS_DIR / stored_name).write_bytes(data)
 
-    mime_type = uploaded_file.type or mimetypes.guess_type(
-        uploaded_file.name
-    )[0] or "application/octet-stream"
+    mime_type = (
+        uploaded_file.type
+        or mimetypes.guess_type(uploaded_file.name)[0]
+        or "application/octet-stream"
+    )
 
     connection = get_connection()
     cursor = connection.cursor()
     cursor.execute(
         """
         INSERT INTO staff_message_attachments
-        (message_id, original_name, stored_name, mime_type, file_size, uploaded_by)
-        VALUES (?, ?, ?, ?, ?, ?)
+        (message_id, original_name, stored_name, mime_type, file_size, uploaded_by, file_data)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
         """,
-        (
-            message_id,
-            uploaded_file.name,
-            stored_name,
-            mime_type,
-            len(data),
-            uploaded_by
-        )
+        (message_id, uploaded_file.name, stored_name, mime_type, len(data), uploaded_by, sqlite3.Binary(data))
     )
     connection.commit()
     connection.close()
     return stored_name
 
 
-def get_message_attachments(message_id):
+def get_message_attachments(message_id, staff_id):
+    """Return attachments only for the sender or recipient of the message."""
     connection = get_connection()
     cursor = connection.cursor()
     cursor.execute(
         """
-        SELECT id, original_name, stored_name, mime_type, file_size
-        FROM staff_message_attachments
-        WHERE message_id = ?
-        ORDER BY id
+        SELECT a.id, a.original_name, a.stored_name, a.mime_type, a.file_size, a.file_data
+        FROM staff_message_attachments AS a
+        JOIN staff_messages AS m ON a.message_id = m.id
+        WHERE a.message_id = ?
+          AND (m.sender_id = ? OR m.recipient_id = ?)
+        ORDER BY a.id
         """,
-        (message_id,)
+        (message_id, staff_id, staff_id)
     )
     rows = cursor.fetchall()
     connection.close()
@@ -874,29 +897,33 @@ def format_file_size(size):
     return f"{size / (1024 * 1024):.1f} MB"
 
 
-def show_attachments(message_id):
-    attachments = get_message_attachments(message_id)
+def show_attachments(message_id, staff_id):
+    """Show authorized attachments, using database data first."""
+    attachments = get_message_attachments(message_id, staff_id)
     if not attachments:
         return
 
     st.markdown("**📎 Attachments**")
     for attachment in attachments:
-        path = ATTACHMENTS_DIR / attachment["stored_name"]
-        if not path.exists():
-            st.warning(
-                f"Attachment unavailable: {attachment['original_name']}"
-            )
+        data = attachment["file_data"]
+
+        # Compatibility with attachments created by the previous version.
+        if data is None:
+            path = ATTACHMENTS_DIR / attachment["stored_name"]
+            if path.exists():
+                data = path.read_bytes()
+
+        if data is None:
+            st.warning(f"Attachment unavailable: {attachment['original_name']}")
             continue
-        data = path.read_bytes()
+
         st.download_button(
-            label=(
-                f"📎 {attachment['original_name']} "
-                f"({format_file_size(attachment['file_size'])})"
-            ),
-            data=data,
+            label=(f"📎 {attachment['original_name']} "
+                   f"({format_file_size(attachment['file_size'])})"),
+            data=bytes(data),
             file_name=attachment["original_name"],
             mime=attachment["mime_type"] or "application/octet-stream",
-            key=f"download_attachment_{attachment['id']}",
+            key=f"download_attachment_{attachment['id']}_{staff_id}",
             use_container_width=True
         )
 
@@ -1131,7 +1158,115 @@ def show_inbox():
             st.divider()
 
             st.write(message["message"])
-            show_attachments(message["id"])
+            show_attachments(message["id"], staff_id)
+
+            # ----------------------------------------------------
+            # DIRECT REPLY
+            # ----------------------------------------------------
+            st.divider()
+
+            with st.form(
+                f"reply_form_{message['id']}_{staff_id}",
+                clear_on_submit=True
+            ):
+                st.markdown("**↩️ Direct Reply**")
+
+                reply_subject = st.text_input(
+                    "Subject",
+                    value=(
+                        message["subject"]
+                        if message["subject"].lower().startswith("re:")
+                        else f"Re: {message['subject']}"
+                    ),
+                    key=f"reply_subject_{message['id']}_{staff_id}"
+                )
+
+                reply_text = st.text_area(
+                    f"Reply to {message['sender_name']}",
+                    placeholder="Write your reply here...",
+                    height=150,
+                    key=f"reply_text_{message['id']}_{staff_id}"
+                )
+
+                reply_files = st.file_uploader(
+                    "📎 Attach files (optional)",
+                    type=[
+                        "pdf", "doc", "docx", "xls", "xlsx",
+                        "ppt", "pptx", "csv", "txt",
+                        "jpg", "jpeg", "png", "gif", "webp", "zip"
+                    ],
+                    accept_multiple_files=True,
+                    key=f"reply_files_{message['id']}_{staff_id}",
+                    help="Maximum 5 files. Maximum 25 MB per file."
+                )
+
+                reply_send = st.form_submit_button(
+                    "↩️ Send Reply",
+                    use_container_width=True,
+                    type="primary"
+                )
+
+            if reply_send:
+                selected_reply_files = (reply_files or [])[
+                    :MAX_ATTACHMENTS_PER_MESSAGE
+                ]
+
+                oversized = [
+                    f.name for f in selected_reply_files
+                    if f.size > MAX_ATTACHMENT_SIZE
+                ]
+
+                if not reply_text.strip():
+                    st.error("Please write a reply before sending.")
+                elif oversized:
+                    st.error(
+                        "These files exceed the 25 MB limit: "
+                        + ", ".join(oversized)
+                    )
+                else:
+                    connection = get_connection()
+                    cursor = connection.cursor()
+
+                    cursor.execute(
+                        """
+                        INSERT INTO staff_messages
+                        (sender_id, recipient_id, subject, message)
+                        VALUES (?, ?, ?, ?)
+                        """,
+                        (
+                            staff_id,
+                            message["sender_id"],
+                            reply_subject.strip() or f"Re: {message['subject']}",
+                            reply_text.strip()
+                        )
+                    )
+
+                    reply_message_id = cursor.lastrowid
+                    connection.commit()
+                    connection.close()
+
+                    try:
+                        for uploaded_file in selected_reply_files:
+                            save_message_attachment(
+                                uploaded_file,
+                                reply_message_id,
+                                staff_id
+                            )
+                    except Exception as exc:
+                        st.error(
+                            f"Reply was created, but an attachment could not "
+                            f"be saved: {exc}"
+                        )
+                        return
+
+                    st.success(
+                        "✅ Reply sent successfully"
+                        + (
+                            f" with {len(selected_reply_files)} attachment(s)."
+                            if selected_reply_files else "."
+                        )
+                    )
+                    st.rerun()
 
             if message["is_read"] == 0:
 
@@ -1231,7 +1366,7 @@ def show_sent():
             st.divider()
 
             st.write(message["message"])
-            show_attachments(message["id"])
+            show_attachments(message["id"], staff_id)
 
 
 # ============================================================
@@ -2069,8 +2204,64 @@ def show_staff_voice_analytics(staff):
 
 
 # ============================================================
+
+# ============================================================
 # STAFF PORTAL
 # ============================================================
+
+
+STAFF_TOOL_LABELS = {key: label for key, label, _ in STAFF_MODULES}
+
+def _restricted_tool(module_key, staff):
+    label = STAFF_TOOL_LABELS.get(module_key, module_key)
+    st.markdown(f"### {label}")
+    st.warning("🔒 **Access Restricted**")
+    st.write("This tool is available in the Pan Ideate Africa staff toolbox, but your current authorization does not permit access.")
+    st.info(f"Your administrator can grant access to **{label}** when appropriate.")
+    st.caption(f"Current role: {staff['role']} • Access is controlled by your individual authorization profile.")
+
+def _render_staff_tool(module_key, staff):
+    if not has_staff_tool_access(staff['id'], module_key):
+        _restricted_tool(module_key, staff)
+        return
+    try:
+        if module_key == 'leave_attendance':
+            from pages.leave_attendance import show_staff
+            show_staff(staff['id'])
+        elif module_key == 'expenses_procurement':
+            from pages.expenses_procurement import show_staff
+            show_staff(staff['id'])
+        elif module_key == 'tasks':
+            from pages.task_manager import show_staff
+            show_staff(staff['id'])
+        elif module_key == 'staff_directory':
+            show_staff_directory_v1(staff['id'])
+        elif module_key == 'staff_messages':
+            st.subheader("✉️ Internal Staff Messages")
+            inbox_tab, compose_tab, sent_tab = st.tabs([f"📥 Inbox ({get_unread_count()})", "📝 Compose Message", "📤 Sent Messages"])
+            with inbox_tab: show_inbox()
+            with compose_tab: compose_message()
+            with sent_tab: show_sent()
+        elif module_key == 'notifications':
+            show_notification_centre(staff['id'])
+        elif module_key == 'documents':
+            show_document_centre(staff['id'])
+        elif module_key == 'ai_assistant':
+            show_staff_ai_assistant(staff['id'])
+        elif module_key == 'meetings':
+            show_staff_meeting_centre(staff['id'])
+        elif module_key == 'approvals':
+            if has_approval_access(staff['id']): show_staff_approval_centre(staff['id'])
+            else: _restricted_tool(module_key, staff)
+        elif module_key == 'audit_log':
+            from pages.audit_log import show_audit_log
+            show_audit_log()
+        else:
+            st.markdown(f"### {STAFF_TOOL_LABELS.get(module_key, module_key)}")
+            st.info("🛠️ This tool is reserved in the staff toolbox and is ready for future staff-facing activation. Your access permission has been recorded.")
+    except Exception as exc:
+        st.error(f"The {STAFF_TOOL_LABELS.get(module_key, module_key)} tool could not be opened safely yet.")
+        st.caption(f"Technical detail: {exc}")
 
 def show_staff_portal():
 
@@ -2170,24 +2361,37 @@ def show_staff_portal():
     # We intentionally use tabs instead of another sidebar
     # because app.py already owns the main Streamlit sidebar.
     # --------------------------------------------------------
+    init_access_control()
+    notification_count = get_notification_count(staff["id"])
+    approval_access = has_approval_access(staff["id"])
+
+    # Complete toolbox stays visible; permissions are enforced when opened.
     tabs = [
-        "🏠 Dashboard",
-        "👥 Staff Directory",
-        "✉️ Messages",
-        "👤 My Profile",
-        "🔒 Staff Voice"
+        "🏠 Dashboard", f"🔔 Notifications ({notification_count})", "👥 Staff Directory",
+        "🕘 Leave & Attendance", "💰 Expenses & Procurement", "📋 Task & Project Manager",
+        "💬 Staff Communications", "✉️ Messages", "👤 My Profile", "📁 Documents",
+        "🤖 AI Staff Assistant", "📅 Meeting Centre", "✅ Approval Centre",
+        "🔐 Audit & Activity Log", "💡 Innovation Ideas", "🎓 Learning Centre", "📚 Knowledge Hub",
+        "🔒 Staff Voice", "🛡️ Staff Management",
     ]
 
-    if staff["role"] == "Super Admin":
-        tabs.append("🛡️ Staff Management")
-        tabs.append("🔐 Confidential Concerns")
-
     selected_tab = st.tabs(tabs)
+
+    tab_indices = {
+        label: index
+        for index, label in enumerate(tabs)
+    }
+
+    notification_tab = next(
+        label
+        for label in tabs
+        if label.startswith("🔔 Notifications")
+    )
 
     # --------------------------------------------------------
     # DASHBOARD TAB
     # --------------------------------------------------------
-    with selected_tab[0]:
+    with selected_tab[tab_indices["🏠 Dashboard"]]:
         st.subheader("🌍 Pan Ideate Africa Staff Dashboard")
 
         st.info(
@@ -2258,61 +2462,47 @@ def show_staff_portal():
             st.info("No active staff members found.")
 
     # --------------------------------------------------------
-    # STAFF DIRECTORY TAB
+    # STAFF TOOLBOX
     # --------------------------------------------------------
-    with selected_tab[1]:
-        show_staff_directory()
+    with selected_tab[tab_indices[f"🔔 Notifications ({notification_count})"]]: _render_staff_tool('notifications', staff)
+    with selected_tab[tab_indices["👥 Staff Directory"]]: _render_staff_tool('staff_directory', staff)
+    with selected_tab[tab_indices["🕘 Leave & Attendance"]]: _render_staff_tool('leave_attendance', staff)
+    with selected_tab[tab_indices["💰 Expenses & Procurement"]]: _render_staff_tool('expenses_procurement', staff)
+    with selected_tab[tab_indices["📋 Task & Project Manager"]]: _render_staff_tool('tasks', staff)
+    with selected_tab[tab_indices["💬 Staff Communications"]]: _render_staff_tool('staff_communications', staff)
+    with selected_tab[tab_indices["✉️ Messages"]]: _render_staff_tool('staff_messages', staff)
+    with selected_tab[tab_indices["👤 My Profile"]]: show_profile()
+    with selected_tab[tab_indices["📁 Documents"]]: _render_staff_tool('documents', staff)
+    with selected_tab[tab_indices["🤖 AI Staff Assistant"]]: _render_staff_tool('ai_assistant', staff)
+    with selected_tab[tab_indices["📅 Meeting Centre"]]: _render_staff_tool('meetings', staff)
+    with selected_tab[tab_indices["✅ Approval Centre"]]: _render_staff_tool('approvals', staff)
+    with selected_tab[tab_indices["🔐 Audit & Activity Log"]]: _render_staff_tool('audit_log', staff)
+    with selected_tab[tab_indices["💡 Innovation Ideas"]]: _render_staff_tool('innovation', staff)
+    with selected_tab[tab_indices["🎓 Learning Centre"]]: _render_staff_tool('learning', staff)
+    with selected_tab[tab_indices["📚 Knowledge Hub"]]: _render_staff_tool('knowledge_hub', staff)
 
     # --------------------------------------------------------
-    # MESSAGES TAB
+    # CONFIDENTIAL STAFF VOICE
+    # Available to all active staff; it is intentionally separate
+    # from ordinary module-access permissions so staff can report
+    # concerns without needing permission from a manager.
     # --------------------------------------------------------
-    with selected_tab[2]:
-        st.subheader("✉️ Internal Staff Messages")
-        st.info(
-            "🔒 Private messaging: you can only see messages sent to you or messages you sent. "
-            "Attachments are also restricted to the sender and recipient."
-        )
-
-        inbox_tab, compose_tab, sent_tab = st.tabs(
-            [
-                f"📥 Inbox ({unread})",
-                "📝 Compose Message",
-                "📤 Sent Messages"
-            ]
-        )
-
-        with inbox_tab:
-            show_inbox()
-
-        with compose_tab:
-            compose_message()
-
-        with sent_tab:
-            show_sent()
-
-    # --------------------------------------------------------
-    # PROFILE TAB
-    # --------------------------------------------------------
-    with selected_tab[3]:
-        show_profile()
-
-    # --------------------------------------------------------
-    # CONFIDENTIAL STAFF VOICE TAB
-    # --------------------------------------------------------
-    with selected_tab[4]:
+    with selected_tab[tab_indices["🔒 Staff Voice"]]:
         show_staff_voice(staff)
 
+    with selected_tab[tab_indices["🛡️ Staff Management"]]:
+        if staff["role"] == "Super Admin":
+            show_staff_management()
+        else:
+            _render_staff_tool("staff_management", staff)
+
     # --------------------------------------------------------
-    # SUPER ADMIN STAFF MANAGEMENT TAB
+    # SUPER ADMIN — CONFIDENTIAL CONCERNS MANAGEMENT
     # --------------------------------------------------------
     if staff["role"] == "Super Admin":
-        with selected_tab[5]:
-            show_staff_management()
-
-        # ----------------------------------------------------
-        # SUPER ADMIN CONFIDENTIAL CONCERNS TAB
-        # ----------------------------------------------------
-        with selected_tab[6]:
+        with selected_tab[tab_indices["🔒 Staff Voice"]]:
+            st.divider()
+            st.subheader("🛡️ Super Admin Confidential Concerns Management")
             show_confidential_concerns_admin(staff)
             st.divider()
             show_staff_voice_analytics(staff)
