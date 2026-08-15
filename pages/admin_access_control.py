@@ -107,6 +107,48 @@ def save_staff_access(staff_id, updated_by, permissions):
     return True, 'Module access permissions saved successfully.'
 
 
+
+STAFF_MODULES = [
+    ('staff_directory', '👥 Staff Directory', 'View the organization staff directory.'),
+    ('leave_attendance', '🕘 Leave & Attendance', 'Use attendance, leave and early-exit tools.'),
+    ('expenses_procurement', '💰 Expenses & Procurement', 'Submit and manage authorized finance requests.'),
+    ('tasks', '📋 Task & Project Manager', 'Work with assigned tasks and projects.'),
+    ('staff_communications', '💬 Staff Communications', 'Access authorized organizational communications.'),
+    ('staff_messages', '✉️ Staff Messages', 'Send and receive private staff messages.'),
+    ('notifications', '🔔 Notification Centre', 'View and manage personal notifications.'),
+    ('ai_assistant', '🤖 AI Staff Assistant', 'Use the authorized staff AI assistant.'),
+    ('meetings', '📅 Meeting Centre', 'Access meetings, agendas and follow-up actions.'),
+    ('approvals', '✅ Approval Centre', 'Review approvals within delegated authority.'),
+    ('audit_log', '🔐 Audit & Activity Log', 'Access audit information when authorized.'),
+    ('documents', '📁 Document Centre', 'Access authorized organizational documents.'),
+    ('innovation', '💡 Innovation Ideas', 'Access the innovation workspace.'),
+    ('learning', '🎓 Learning Centre', 'Access internal learning tools.'),
+    ('knowledge_hub', '📚 Knowledge Hub', 'Access internal Knowledge Hub tools.'),
+    ('staff_management', '🛡️ Staff Management', 'Manage staff accounts; normally Super Admin only.'),
+]
+
+DEFAULT_GRANTED_STAFF_MODULES = {'staff_directory','staff_messages','notifications','documents','ai_assistant','meetings'}
+
+def get_staff_tool_access(staff_id):
+    init_access_control()
+    con = db()
+    rows = con.execute('SELECT module_key, can_access FROM staff_module_access WHERE staff_id = ?', (staff_id,)).fetchall()
+    con.close()
+    access = {row['module_key']: bool(row['can_access']) for row in rows}
+    for key in DEFAULT_GRANTED_STAFF_MODULES:
+        access.setdefault(key, True)
+    return access
+
+def has_staff_tool_access(staff_id, module_key):
+    if not staff_id:
+        return False
+    if is_super_admin(staff_id):
+        return True
+    return bool(get_staff_tool_access(staff_id).get(module_key, False))
+
+def save_staff_tool_access(staff_id, updated_by, permissions):
+    return save_staff_access(staff_id, updated_by, permissions)
+
 def show_access_control(super_admin_id):
     if not is_super_admin(super_admin_id):
         st.error('🔒 Only the Super Admin can manage staff module access.')
@@ -166,3 +208,21 @@ def show_access_control(super_admin_id):
             st.write(f'✅ {label}')
     else:
         st.warning('No Administration Centre functions have been assigned to this staff member.')
+
+    st.divider()
+    st.subheader('🧰 Staff Toolbox Access')
+    st.caption('The complete toolbox remains visible to staff; these permissions decide which tools they can open.')
+    staff_access = get_staff_tool_access(staff_id)
+    tool_permissions = {}
+    with st.form(f'staff_toolbox_access_{staff_id}'):
+        cols = st.columns(2)
+        for i, (key, label, description) in enumerate(STAFF_MODULES):
+            with cols[i % 2]:
+                locked = key == 'staff_management' and person['role'] != 'Super Admin'
+                tool_permissions[key] = st.checkbox(label, value=(True if person['role'] == 'Super Admin' else staff_access.get(key, False)), disabled=locked, key=f'staff_tool_{staff_id}_{key}', help=description)
+        save_tools = st.form_submit_button('💾 Save Staff Toolbox Access', type='primary', use_container_width=True)
+    if save_tools:
+        ok, message = save_staff_tool_access(staff_id, super_admin_id, tool_permissions)
+        (st.success if ok else st.error)(message)
+        if ok:
+            st.rerun()

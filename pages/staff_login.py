@@ -16,6 +16,8 @@ from pages.ai_staff_assistant import show_staff_ai_assistant
 from pages.meeting_centre import show_staff_meeting_centre
 from pages.approval_centre import show_staff_approval_centre
 from utils.approval_engine import has_approval_access
+from pages.admin_access_control import init_access_control, has_staff_tool_access, STAFF_MODULES
+
 
 # ============================================================
 # PAN IDEATE AFRICA
@@ -1681,6 +1683,60 @@ def logout():
 # STAFF PORTAL
 # ============================================================
 
+
+STAFF_TOOL_LABELS = {key: label for key, label, _ in STAFF_MODULES}
+
+def _restricted_tool(module_key, staff):
+    label = STAFF_TOOL_LABELS.get(module_key, module_key)
+    st.markdown(f"### {label}")
+    st.warning("🔒 **Access Restricted**")
+    st.write("This tool is available in the Pan Ideate Africa staff toolbox, but your current authorization does not permit access.")
+    st.info(f"Your administrator can grant access to **{label}** when appropriate.")
+    st.caption(f"Current role: {staff['role']} • Access is controlled by your individual authorization profile.")
+
+def _render_staff_tool(module_key, staff):
+    if not has_staff_tool_access(staff['id'], module_key):
+        _restricted_tool(module_key, staff)
+        return
+    try:
+        if module_key == 'leave_attendance':
+            from pages.leave_attendance import show_staff
+            show_staff(staff['id'])
+        elif module_key == 'expenses_procurement':
+            from pages.expenses_procurement import show_staff
+            show_staff(staff['id'])
+        elif module_key == 'tasks':
+            from pages.task_manager import show_staff
+            show_staff(staff['id'])
+        elif module_key == 'staff_directory':
+            show_staff_directory_v1(staff['id'])
+        elif module_key == 'staff_messages':
+            st.subheader("✉️ Internal Staff Messages")
+            inbox_tab, compose_tab, sent_tab = st.tabs([f"📥 Inbox ({get_unread_count()})", "📝 Compose Message", "📤 Sent Messages"])
+            with inbox_tab: show_inbox()
+            with compose_tab: compose_message()
+            with sent_tab: show_sent()
+        elif module_key == 'notifications':
+            show_notification_centre(staff['id'])
+        elif module_key == 'documents':
+            show_document_centre(staff['id'])
+        elif module_key == 'ai_assistant':
+            show_staff_ai_assistant(staff['id'])
+        elif module_key == 'meetings':
+            show_staff_meeting_centre(staff['id'])
+        elif module_key == 'approvals':
+            if has_approval_access(staff['id']): show_staff_approval_centre(staff['id'])
+            else: _restricted_tool(module_key, staff)
+        elif module_key == 'audit_log':
+            from pages.audit_log import show_audit_log
+            show_audit_log()
+        else:
+            st.markdown(f"### {STAFF_TOOL_LABELS.get(module_key, module_key)}")
+            st.info("🛠️ This tool is reserved in the staff toolbox and is ready for future staff-facing activation. Your access permission has been recorded.")
+    except Exception as exc:
+        st.error(f"The {STAFF_TOOL_LABELS.get(module_key, module_key)} tool could not be opened safely yet.")
+        st.caption(f"Technical detail: {exc}")
+
 def show_staff_portal():
 
     staff = get_current_staff()
@@ -1779,25 +1835,19 @@ def show_staff_portal():
     # We intentionally use tabs instead of another sidebar
     # because app.py already owns the main Streamlit sidebar.
     # --------------------------------------------------------
+    init_access_control()
     notification_count = get_notification_count(staff["id"])
     approval_access = has_approval_access(staff["id"])
 
+    # Complete toolbox stays visible; permissions are enforced when opened.
     tabs = [
-        "🏠 Dashboard",
-        f"🔔 Notifications ({notification_count})",
-        "👥 Staff Directory",
-        "✉️ Messages",
-        "👤 My Profile",
-        "📁 Documents",
-        "🤖 AI Staff Assistant",
-        "📅 Meeting Centre",
+        "🏠 Dashboard", f"🔔 Notifications ({notification_count})", "👥 Staff Directory",
+        "🕘 Leave & Attendance", "💰 Expenses & Procurement", "📋 Task & Project Manager",
+        "💬 Staff Communications", "✉️ Messages", "👤 My Profile", "📁 Documents",
+        "🤖 AI Staff Assistant", "📅 Meeting Centre", "✅ Approval Centre",
+        "🔐 Audit & Activity Log", "💡 Innovation Ideas", "🎓 Learning Centre", "📚 Knowledge Hub",
+        "🛡️ Staff Management",
     ]
-
-    if approval_access:
-        tabs.append("✅ Approval Centre")
-
-    if staff["role"] == "Super Admin":
-        tabs.append("🛡️ Staff Management")
 
     selected_tab = st.tabs(tabs)
 
@@ -1886,80 +1936,29 @@ def show_staff_portal():
             st.info("No active staff members found.")
 
     # --------------------------------------------------------
-    # STAFF DIRECTORY TAB
+    # STAFF TOOLBOX
     # --------------------------------------------------------
-    with selected_tab[tab_indices[notification_tab]]:
-        show_notification_centre(staff["id"])
-
-    # --------------------------------------------------------
-    # STAFF DIRECTORY TAB
-    # --------------------------------------------------------
-    with selected_tab[tab_indices["👥 Staff Directory"]]:
-        show_staff_directory_v1(staff["id"])
-
-    # --------------------------------------------------------
-    # MESSAGES TAB
-    # --------------------------------------------------------
-    with selected_tab[tab_indices["✉️ Messages"]]:
-        st.subheader("✉️ Internal Staff Messages")
-        st.info(
-            "🔒 Private messaging: you can only see messages sent to you or messages you sent. "
-            "Attachments are also restricted to the sender and recipient."
-        )
-
-        inbox_tab, compose_tab, sent_tab = st.tabs(
-            [
-                f"📥 Inbox ({unread})",
-                "📝 Compose Message",
-                "📤 Sent Messages"
-            ]
-        )
-
-        with inbox_tab:
-            show_inbox()
-
-        with compose_tab:
-            compose_message()
-
-        with sent_tab:
-            show_sent()
-
-    # --------------------------------------------------------
-    # PROFILE TAB
-    # --------------------------------------------------------
-    with selected_tab[tab_indices["👤 My Profile"]]:
-        show_profile()
-    # --------------------------------------------------------
-# DOCUMENT CENTRE
-# --------------------------------------------------------
-    with selected_tab[tab_indices["📁 Documents"]]:
-        show_document_centre(staff["id"])
-
-    # --------------------------------------------------------
-    # AI STAFF ASSISTANT TAB
-    # --------------------------------------------------------
-    with selected_tab[tab_indices["🤖 AI Staff Assistant"]]:
-        show_staff_ai_assistant(staff["id"])
-
-    # --------------------------------------------------------
-    # MEETING CENTRE TAB
-    # --------------------------------------------------------
-    with selected_tab[tab_indices["📅 Meeting Centre"]]:
-        show_staff_meeting_centre(staff["id"])
-
-    # --------------------------------------------------------
-    # APPROVAL CENTRE TAB
-    # --------------------------------------------------------
-    if approval_access:
-        with selected_tab[tab_indices["✅ Approval Centre"]]:
-            show_staff_approval_centre(staff["id"])
-
-    # --------------------------------------------------------
-    # SUPER ADMIN STAFF MANAGEMENT TAB
-    # --------------------------------------------------------
-    if staff["role"] == "Super Admin":
-        with selected_tab[tab_indices["🛡️ Staff Management"]]:
+    with selected_tab[tab_indices[f"🔔 Notifications ({notification_count})"]]: _render_staff_tool('notifications', staff)
+    with selected_tab[tab_indices["👥 Staff Directory"]]: _render_staff_tool('staff_directory', staff)
+    with selected_tab[tab_indices["🕘 Leave & Attendance"]]: _render_staff_tool('leave_attendance', staff)
+    with selected_tab[tab_indices["💰 Expenses & Procurement"]]: _render_staff_tool('expenses_procurement', staff)
+    with selected_tab[tab_indices["📋 Task & Project Manager"]]: _render_staff_tool('tasks', staff)
+    with selected_tab[tab_indices["💬 Staff Communications"]]: _render_staff_tool('staff_communications', staff)
+    with selected_tab[tab_indices["✉️ Messages"]]: _render_staff_tool('staff_messages', staff)
+    with selected_tab[tab_indices["👤 My Profile"]]: show_profile()
+    with selected_tab[tab_indices["📁 Documents"]]: _render_staff_tool('documents', staff)
+    with selected_tab[tab_indices["🤖 AI Staff Assistant"]]: _render_staff_tool('ai_assistant', staff)
+    with selected_tab[tab_indices["📅 Meeting Centre"]]: _render_staff_tool('meetings', staff)
+    with selected_tab[tab_indices["✅ Approval Centre"]]: _render_staff_tool('approvals', staff)
+    with selected_tab[tab_indices["🔐 Audit & Activity Log"]]: _render_staff_tool('audit_log', staff)
+    with selected_tab[tab_indices["💡 Innovation Ideas"]]: _render_staff_tool('innovation', staff)
+    with selected_tab[tab_indices["🎓 Learning Centre"]]: _render_staff_tool('learning', staff)
+    with selected_tab[tab_indices["📚 Knowledge Hub"]]: _render_staff_tool('knowledge_hub', staff)
+    with selected_tab[tab_indices["🛡️ Staff Management"]]:
+        if staff["role"] == "Super Admin":
             show_staff_management()
+        else:
+            _render_staff_tool("staff_management", staff)
 
     # --------------------------------------------------------
     # LOGOUT

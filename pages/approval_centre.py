@@ -1,5 +1,7 @@
 import streamlit as st
 
+from pages.admin_access_control import STAFF_MODULES, get_staff_tool_access, save_staff_tool_access
+
 from utils.approval_engine import (
     AUTHORITY_LEVELS,
     REQUEST_LABELS,
@@ -497,6 +499,38 @@ def _show_authority_profiles(super_admin_id):
             )
 
 
+
+def _show_staff_toolbox_access(super_admin_id):
+    if not is_super_admin(super_admin_id):
+        st.error("🔒 Only the Super Admin can manage staff toolbox access.")
+        return
+    st.subheader("🧰 Staff Toolbox Access")
+    st.caption("Staff can see the toolbox; this profile decides which tools they can actually open.")
+    options = _staff_options()
+    if not options:
+        st.info("No active staff members are available.")
+        return
+    selected_label = st.selectbox("Staff Member", list(options.keys()), key="approval_toolbox_staff")
+    staff_id = options[selected_label]
+    person = get_staff(staff_id)
+    if person and person["role"] == "Super Admin":
+        st.success("👑 Super Admin: all staff tools are automatically available.")
+        return
+    current = get_staff_tool_access(staff_id)
+    permissions = {}
+    with st.form(f"approval_toolbox_access_{staff_id}"):
+        cols = st.columns(2)
+        for i, (key, label, description) in enumerate(STAFF_MODULES):
+            with cols[i % 2]:
+                locked = key == "staff_management" and person and person["role"] != "Super Admin"
+                permissions[key] = st.checkbox(label, value=current.get(key, False), disabled=locked, key=f"approval_tool_{staff_id}_{key}", help=description)
+        save = st.form_submit_button("💾 Save Toolbox Access", type="primary", use_container_width=True)
+    if save:
+        ok, message = save_staff_tool_access(staff_id, super_admin_id, permissions)
+        (st.success if ok else st.error)(message)
+        if ok:
+            st.rerun()
+
 def show_approval_centre(user_id):
     if not has_approval_access(user_id):
         st.error(
@@ -608,6 +642,7 @@ def show_approval_centre(user_id):
     if super_admin:
         with tabs[6]:
             _show_authority_profiles(user_id)
+            _show_staff_toolbox_access(user_id)
 
 
 def show_staff_approval_centre(staff_id):
