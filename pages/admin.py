@@ -26,6 +26,7 @@ from pages.notification_centre import (
 from pages.task_manager import show_admin_task_manager
 from pages.document_centre import show_admin_document_centre
 from pages.leave_attendance import show_admin_leave_attendance
+from pages.expenses_procurement import show_admin_expenses_procurement
 from pages.staff_directory import show_admin_staff_directory
 from pages.staff_login import init_database as init_staff_database, create_initial_admin
 from pages.ai_staff_assistant import show_admin_ai_staff_assistant
@@ -148,6 +149,7 @@ def show_admin():
             "👥 Staff Management",
             "👥 Staff Directory",
             "🕘 Leave & Attendance",
+            "💰 Expenses & Procurement",
             "📋 Task & Project Manager",
             "💬 Staff Communications",
             "✉️ Staff Messages",
@@ -556,8 +558,8 @@ def show_admin():
             "📋 Task & Project Manager",
             "📅 Meeting Centre",
             "✅ Approval Centre",
-            "📋 Task & Project Manager",
-            "📋 Task & Project Manager",
+            "💰 Expenses & Procurement",
+            "💰 Expenses & Procurement",
             "📁 Document Centre",
             "🤖 AI Staff Assistant",
             "🔔 Notification Centre",
@@ -1728,6 +1730,37 @@ def show_admin():
                 )
         except Exception as error:
             st.error(f"Unable to open Leave & Attendance: {error}")
+
+    elif admin_option == "💰 Expenses & Procurement":
+        # Open the existing finance/procurement module using the central
+        # Super Admin staff account. This keeps Expenses & Procurement
+        # connected to the same staff database and approval permissions
+        # used by the rest of the Administration Centre.
+        admin_staff_id = None
+        connection = get_connection()
+        row = connection.execute("""
+            SELECT id
+            FROM staff_users
+            WHERE LOWER(username) = 'admin'
+              AND status = 'Active'
+            LIMIT 1
+        """).fetchone()
+        connection.close()
+
+        if row:
+            admin_staff_id = row["id"]
+
+        if admin_staff_id:
+            try:
+                show_admin_expenses_procurement(admin_staff_id)
+            except Exception as error:
+                st.error(f"Unable to open Expenses & Procurement: {error}")
+        else:
+            st.error("The active Super Admin staff account could not be found.")
+
+    # ========================================================
+    # TASK & PROJECT MANAGER
+    # ========================================================
 
     elif admin_option == "📋 Task & Project Manager":
         admin_staff_id = None
