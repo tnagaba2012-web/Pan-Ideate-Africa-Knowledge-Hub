@@ -121,6 +121,7 @@ def init_database():
             currency TEXT NOT NULL DEFAULT 'UGX',
             expense_date TEXT NOT NULL,
             description TEXT NOT NULL,
+            project TEXT DEFAULT 'General Operations',
             receipt_reference TEXT,
             status TEXT NOT NULL DEFAULT 'Pending',
             submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -141,6 +142,7 @@ def init_database():
             estimated_unit_cost REAL NOT NULL,
             currency TEXT NOT NULL DEFAULT 'UGX',
             supplier TEXT,
+            project TEXT DEFAULT 'General Operations',
             justification TEXT NOT NULL,
             required_by TEXT,
             status TEXT NOT NULL DEFAULT 'Pending',
@@ -299,7 +301,14 @@ def init_database():
         row["name"]
         for row in cur.execute("PRAGMA table_info(purchase_requests)").fetchall()
     }
+    # Project / cost-centre fields for both ordinary expenses and procurement.
+    # Existing databases are migrated safely; no records are deleted.
+    expense_cols = {row["name"] for row in cur.execute("PRAGMA table_info(expense_claims)").fetchall()}
+    if "project" not in expense_cols:
+        cur.execute("ALTER TABLE expense_claims ADD COLUMN project TEXT DEFAULT 'General Operations'")
+
     purchase_migrations = {
+        "project": "ALTER TABLE purchase_requests ADD COLUMN project TEXT DEFAULT 'General Operations'",
         "actual_unit_cost": "ALTER TABLE purchase_requests ADD COLUMN actual_unit_cost REAL",
         "actual_quantity": "ALTER TABLE purchase_requests ADD COLUMN actual_quantity REAL",
         "actual_purchase_date": "ALTER TABLE purchase_requests ADD COLUMN actual_purchase_date TEXT",
@@ -703,6 +712,7 @@ def submit_expense(
     expense_date,
     description,
     receipt_reference="",
+    project="General Operations",
 ):
     person = get_staff(staff_id)
 
@@ -732,9 +742,10 @@ def submit_expense(
             currency,
             expense_date,
             description,
+            project,
             receipt_reference
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     """, (
         staff_id,
         category,
@@ -742,6 +753,7 @@ def submit_expense(
         currency,
         expense_date.isoformat(),
         description.strip(),
+        (project or "General Operations").strip(),
         receipt_reference.strip(),
     ))
     claim_id = cur.lastrowid
@@ -754,13 +766,13 @@ def submit_expense(
         staff_id,
         staff_id,
         "submitted",
-        f"{category}; {amount:.2f} {currency}; {expense_date}",
+        f"{category}; {amount:.2f} {currency}; {expense_date}; project={project}",
     )
 
     notify_approvers(
         "💰 New Expense Claim",
         f"{person['full_name']} submitted an expense claim "
-        f"for {amount:,.2f} {currency}.",
+        f"for {amount:,.2f} {currency} ({project}).",
         related_id=claim_id,
         related_type="expense_claim",
     )
@@ -903,6 +915,7 @@ def submit_purchase_request(
     supplier,
     justification,
     required_by,
+    project="General Operations",
 ):
     person = get_staff(staff_id)
 
@@ -939,10 +952,11 @@ def submit_purchase_request(
             estimated_unit_cost,
             currency,
             supplier,
+            project,
             justification,
             required_by
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, (
         staff_id,
         category,
@@ -952,6 +966,7 @@ def submit_purchase_request(
         estimated_unit_cost,
         currency,
         supplier.strip(),
+        (project or "General Operations").strip(),
         justification.strip(),
         required_by.isoformat() if required_by else None,
     ))
@@ -968,7 +983,7 @@ def submit_purchase_request(
         staff_id,
         staff_id,
         "submitted",
-        f"{item_name.strip()}; estimated total "
+        f"{item_name.strip()}; project={project}; estimated total "
         f"{total:,.2f} {currency}",
     )
 
@@ -976,7 +991,7 @@ def submit_purchase_request(
         "🛒 New Purchase Request",
         f"{person['full_name']} requested "
         f"{quantity:g} {unit} of {item_name.strip()} "
-        f"(estimated {total:,.2f} {currency}).",
+        f"for {project} (estimated {total:,.2f} {currency}).",
         related_id=request_id,
         related_type="purchase_request",
     )
@@ -1210,7 +1225,7 @@ def ensure_ledger_from_approved_expenses():
             "Not specified",
             None,
             None,
-            None,
+            row["project"] if "project" in row.keys() else "General Operations",
             row["staff_id"],
             "expense",
             row["id"],
@@ -1323,7 +1338,7 @@ def record_actual_purchase(
 
 
 def ledger_rows(start_date=None, end_date=None, category="All",
-                currency="All", transaction_type="All", search=""):
+                currency="All", transaction_type="All", search="", project="All"):
     init_database()
     con = db()
     clauses = ["1=1"]
@@ -1344,6 +1359,9 @@ def ledger_rows(start_date=None, end_date=None, category="All",
     if transaction_type != "All":
         clauses.append("transaction_type = ?")
         params.append(transaction_type)
+    if project != "All":
+        clauses.append("COALESCE(project, 'General Operations') = ?")
+        params.append(project)
     if search.strip():
         q = f"%{search.strip()}%"
         clauses.append("""
@@ -1538,6 +1556,7 @@ def show_finance_dashboard(admin_id):
         "📅 Daily / Ledger",
         "📆 Monthly",
         "📈 Categories",
+        "🏗️ Projects",
         "🎯 Budget vs Actual",
     ])
 
@@ -1559,6 +1578,12 @@ def show_finance_dashboard(admin_id):
             ["All"] + CURRENCIES,
             key="ledger_currency",
         )
+        project_options = ["All", "General Operations"]
+        con = db()
+        project_rows = con.execute("SELECT DISTINCT COALESCE(project, 'General Operations') FROM finance_ledger ORDER BY 1").fetchall()
+        con.close()
+        project_options += [r[0] for r in project_rows if r[0] and r[0] not in project_options]
+        selected_project = st.selectbox("Project / Cost Centre", project_options, key="ledger_project")
 
         rows = ledger_rows(
             start_date=start,
@@ -1566,6 +1591,7 @@ def show_finance_dashboard(admin_id):
             currency=currency,
             transaction_type=types,
             search=search,
+            project=selected_project,
         )
 
         totals = ledger_totals(rows)
@@ -1581,6 +1607,7 @@ def show_finance_dashboard(admin_id):
                 "Date": r["transaction_date"],
                 "Type": r["transaction_type"],
                 "Category": r["category"],
+                "Project / Cost Centre": r["project"] or "General Operations",
                 "Item / Purpose": r["item_description"],
                 "Qty": r["quantity"],
                 "Unit": r["unit"],
@@ -1651,6 +1678,22 @@ def show_finance_dashboard(admin_id):
             st.info("No category expenditure data available.")
 
     with tabs[3]:
+        st.markdown("### 🏗️ Project & Cost Centre Expenditure")
+        st.caption("See how much has actually been spent on each project and on general company operations.")
+        project_rows = ledger_rows(start_date=date(year, 1, 1), end_date=date(year, 12, 31))
+        totals = {}
+        for r in project_rows:
+            key = (r["project"] or "General Operations", r["currency"])
+            totals[key] = totals.get(key, 0.0) + float(r["amount"] or 0)
+        if totals:
+            st.dataframe([
+                {"Project / Cost Centre": k[0], "Currency": k[1], "Actual Expenditure": v}
+                for k, v in sorted(totals.items())
+            ], use_container_width=True, hide_index=True)
+        else:
+            st.info("No project expenditure has been recorded yet.")
+
+    with tabs[4]:
         st.markdown("### 🎯 Budget vs Actual")
         st.caption(
             "Set annual budgets by category. Actuals are calculated automatically from the finance ledger."
@@ -1718,6 +1761,7 @@ def show_staff_expenses_procurement(staff_id):
     st.success(
         f"Signed in as: {person['full_name']} • {person['role']}"
     )
+    st.info("💡 Use **General Operations** for ordinary daily running costs. Use a specific project name for project-related expenses and material requests so Finance can automatically report spending by project.")
 
     tabs = st.tabs([
         "💰 Submit Expense",
@@ -1753,6 +1797,12 @@ def show_staff_expenses_procurement(staff_id):
                     CURRENCIES,
                 )
 
+            project = st.text_input(
+                "Project / Cost Centre",
+                value="General Operations",
+                help="Use General Operations for ordinary company running costs, or enter the project this expense supports.",
+            )
+
             expense_date = st.date_input(
                 "Expense Date",
                 value=date.today(),
@@ -1787,6 +1837,7 @@ def show_staff_expenses_procurement(staff_id):
                     expense_date,
                     description,
                     receipt_reference,
+                    project,
                 )
                 (st.success if ok else st.error)(msg)
 
@@ -1845,6 +1896,13 @@ def show_staff_expenses_procurement(staff_id):
                 "Preferred Supplier (optional)",
             )
 
+            project = st.text_input(
+                "Project / Cost Centre",
+                value="General Operations",
+                help="For example: Project A, Iron Oxide Pigments, Biochar, or General Operations.",
+                key="procurement_project",
+            )
+
             required_by = st.date_input(
                 "Required By (optional)",
                 value=None,
@@ -1876,6 +1934,7 @@ def show_staff_expenses_procurement(staff_id):
                     supplier,
                     justification,
                     required_by,
+                    project,
                 )
                 (st.success if ok else st.error)(msg)
 

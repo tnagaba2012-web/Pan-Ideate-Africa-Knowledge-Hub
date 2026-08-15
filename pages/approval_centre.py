@@ -102,7 +102,7 @@ def _review_request(ctx, approver_id, decision, note):
     return False, "Unsupported approval type."
 
 
-def _render_request(ctx, user_id):
+def _render_request(ctx, user_id, view_key="pending"):
     routing = ctx.get("routing", {})
     is_override = is_super_admin(user_id) and routing.get("level", 4) < 4
 
@@ -142,12 +142,24 @@ def _render_request(ctx, user_id):
 
         st.write(f"**Details:** {ctx['details']}")
 
-        with st.form(
-            f"approval_{ctx['source_type']}_{ctx['source_id']}_{user_id}"
-        ):
+        # IMPORTANT: the same request is intentionally displayed in more than
+        # one Approval Centre tab (for example, All Pending and Procurement).
+        # Streamlit requires every form/widget key on the page to be unique.
+        # view_key separates those legitimate renderings while the request ID
+        # keeps each individual approval tied to the correct request.
+        form_key = (
+            f"approval_{view_key}_{ctx['source_type']}_"
+            f"{ctx['source_id']}_{user_id}"
+        )
+        note_key = (
+            f"note_{view_key}_{ctx['source_type']}_"
+            f"{ctx['source_id']}_{user_id}"
+        )
+
+        with st.form(form_key):
             note = st.text_area(
                 "Approval / rejection note",
-                key=f"note_{ctx['source_type']}_{ctx['source_id']}_{user_id}",
+                key=note_key,
             )
 
             left, right = st.columns(2)
@@ -179,20 +191,32 @@ def _render_request(ctx, user_id):
                     st.rerun()
 
 
-def _show_pending(requests, user_id, heading, source_type=None):
+def _show_pending(requests, user_id, heading, source_type=None, view_key="pending"):
     st.subheader(heading)
 
-    visible = [
-        request for request in requests
-        if source_type is None or request["source_type"] == source_type
-    ]
+    # Keep each request only once inside this particular tab. The same request
+    # may still appear in another tab, where view_key gives it a separate,
+    # valid Streamlit form namespace.
+    visible = []
+    seen = set()
+
+    for request in requests:
+        if source_type is not None and request["source_type"] != source_type:
+            continue
+
+        identity = (request["source_type"], request["source_id"])
+        if identity in seen:
+            continue
+
+        seen.add(identity)
+        visible.append(request)
 
     if not visible:
         st.success("✅ No approvals currently require your attention.")
         return
 
     for request in visible:
-        _render_request(request, user_id)
+        _render_request(request, user_id, view_key=view_key)
 
 
 def _show_history(user_id):
@@ -602,6 +626,7 @@ def show_approval_centre(user_id):
             requests,
             user_id,
             "📥 Approvals Requiring Your Attention",
+            view_key="all_pending",
         )
 
     with tabs[1]:
@@ -610,6 +635,7 @@ def show_approval_centre(user_id):
             user_id,
             "🏖️ Leave Requests",
             "leave",
+            view_key="leave",
         )
 
     with tabs[2]:
@@ -618,6 +644,7 @@ def show_approval_centre(user_id):
             user_id,
             "🚪 Early Sign-Out Requests",
             "early_signout",
+            view_key="early_signout",
         )
 
     with tabs[3]:
@@ -626,6 +653,7 @@ def show_approval_centre(user_id):
             user_id,
             "💰 Expense Claims",
             "expense",
+            view_key="expenses",
         )
 
     with tabs[4]:
@@ -634,6 +662,7 @@ def show_approval_centre(user_id):
             user_id,
             "🛒 Procurement Requests",
             "procurement",
+            view_key="procurement",
         )
 
     with tabs[5]:
