@@ -31,7 +31,6 @@ from pages.staff_login import init_database as init_staff_database, create_initi
 from pages.ai_staff_assistant import show_admin_ai_staff_assistant
 from pages.meeting_centre import show_admin_meeting_centre
 from pages.approval_centre import show_approval_centre
-from pages.audit_log import show_audit_log, log_audit_event
 
 # ============================================================
 # PAN IDEATE AFRICA
@@ -93,22 +92,6 @@ def show_admin():
 
     st.success("Login successful.")
 
-    # Record one successful administrator login per active Streamlit session.
-    if not st.session_state.get("admin_audit_login_recorded", False):
-        try:
-            log_audit_event(
-                "Administration",
-                "LOGIN",
-                "Administrator signed in to the Administration Centre.",
-                actor_name="PAN IDEATE AFRICA ADMINISTRATOR",
-                actor_role="Administrator",
-                severity="INFO",
-            )
-            st.session_state["admin_audit_login_recorded"] = True
-        except Exception:
-            # Audit logging must never prevent the existing Admin Centre from opening.
-            pass
-
     st.divider()
 
     # ========================================================
@@ -155,7 +138,6 @@ def show_admin():
             "🤖 AI Staff Assistant",
             "📅 Meeting Centre",
             "✅ Approval Centre",
-            "🔐 Audit & Activity Log",
             "📁 Document Centre",
             "💡 Innovation Ideas",
             "🎓 Learning Centre",
@@ -548,7 +530,6 @@ def show_admin():
             "📁 Documents",
             "🤖 AI Assistant",
             "🔔 Notifications",
-            "🔐 Audit Log",
         ]
         shortcut_targets = [
             "👥 Staff Directory",
@@ -561,7 +542,6 @@ def show_admin():
             "📁 Document Centre",
             "🤖 AI Staff Assistant",
             "🔔 Notification Centre",
-            "🔐 Audit & Activity Log",
         ]
 
         for index, label in enumerate(shortcut_labels):
@@ -2182,10 +2162,6 @@ def show_admin():
             "Learning Centre administration will be "
             "connected in a later stage."
         )
-
-    elif admin_option == "🔐 Audit & Activity Log":
-
-        show_audit_log()
 
     elif admin_option == "📚 Knowledge Hub":
 
