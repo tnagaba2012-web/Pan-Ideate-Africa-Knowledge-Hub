@@ -38,6 +38,15 @@ from pages.approval_centre import show_approval_centre
 # ============================================================
 
 
+def _dashboard_shortcut(target):
+    """Set the administration destination from a dashboard shortcut.
+
+    This runs as a Streamlit button callback, before the next script run,
+    so it is safe to update the selectbox session-state value.
+    """
+    st.session_state["admin_area"] = target
+
+
 def show_admin():
 
     st.title("🔐 Pan Ideate Africa Admin")
@@ -537,9 +546,13 @@ def show_admin():
 
         for index, label in enumerate(shortcut_labels):
             with shortcuts[index % len(shortcuts)]:
-                if st.button(label, key=f"dashboard_shortcut_{index}", use_container_width=True):
-                    st.session_state["admin_area"] = shortcut_targets[index]
-                    st.rerun()
+                st.button(
+                    label,
+                    key=f"dashboard_shortcut_{index}",
+                    use_container_width=True,
+                    on_click=_dashboard_shortcut,
+                    args=(shortcut_targets[index],),
+                )
 
         connection.close()
 
