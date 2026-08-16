@@ -1214,7 +1214,7 @@ def ensure_ledger_from_approved_expenses():
                 currency, payment_method, supplier, department, project,
                 staff_id, source_type, source_id, receipt_reference, notes,
                 created_by
-            ) VALUES (?, 'Expense', ?, ?, 1, 'item', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, 'Expense', ?, ?, 1, 'item', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             row["expense_date"],
             row["category"],
