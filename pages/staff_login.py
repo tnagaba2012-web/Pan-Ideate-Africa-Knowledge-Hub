@@ -2256,6 +2256,9 @@ def _render_staff_tool(module_key, staff):
         elif module_key == 'audit_log':
             from pages.audit_log import show_audit_log
             show_audit_log()
+        elif module_key == 'innovation':
+            from pages.innovation_engine import show_page
+            show_page(staff)
         else:
             st.markdown(f"### {STAFF_TOOL_LABELS.get(module_key, module_key)}")
             st.info("🛠️ This tool is reserved in the staff toolbox and is ready for future staff-facing activation. Your access permission has been recorded.")

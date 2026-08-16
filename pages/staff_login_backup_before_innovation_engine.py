@@ -1,4 +1,8 @@
 import streamlit as st
+from pages.notification_centre import (
+    show_notification_centre,
+    get_notification_count,
+)
 import sqlite3
 import hashlib
 import secrets
@@ -6,6 +10,13 @@ from pathlib import Path
 from datetime import datetime
 import uuid
 import mimetypes
+from pages.document_centre import show_document_centre
+from pages.staff_directory import show_staff as show_staff_directory_v1
+from pages.ai_staff_assistant import show_staff_ai_assistant
+from pages.meeting_centre import show_staff_meeting_centre
+from pages.approval_centre import show_staff_approval_centre
+from utils.approval_engine import has_approval_access
+from pages.admin_access_control import init_access_control, has_staff_tool_access, STAFF_MODULES
 
 
 # ============================================================
@@ -18,6 +29,10 @@ DATA_DIR = BASE_DIR / "data"
 DATABASE_PATH = DATA_DIR / "pan_ideate.db"
 ATTACHMENTS_DIR = DATA_DIR / "staff_attachments"
 MAX_ATTACHMENT_SIZE = 25 * 1024 * 1024
+
+# Staff Voice keeps confidential-report attachments in a separate directory.
+STAFF_VOICE_ATTACHMENTS_DIR = DATA_DIR / "staff_voice_attachments"
+MAX_STAFF_VOICE_ATTACHMENT_SIZE = 15 * 1024 * 1024
 MAX_ATTACHMENTS_PER_MESSAGE = 5
 
 
@@ -30,6 +45,7 @@ def get_connection():
 
     DATA_DIR.mkdir(exist_ok=True)
     ATTACHMENTS_DIR.mkdir(exist_ok=True)
+    STAFF_VOICE_ATTACHMENTS_DIR.mkdir(exist_ok=True)
 
     connection = sqlite3.connect(
         DATABASE_PATH,
@@ -202,6 +218,58 @@ def init_database():
             "ALTER TABLE staff_message_attachments "
             "ADD COLUMN file_data BLOB"
         )
+
+# --------------------------------------------------------
+    # CONFIDENTIAL STAFF VOICE / CONCERNS
+    # --------------------------------------------------------
+    # Identity is stored for Super Admin accountability, but ordinary
+    # staff and delegated operators never receive reporter identity.
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS staff_voice_concerns (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            case_number TEXT UNIQUE NOT NULL,
+            reporter_id INTEGER NOT NULL,
+            category TEXT NOT NULL,
+            subject TEXT NOT NULL,
+            description TEXT NOT NULL,
+            urgency TEXT NOT NULL DEFAULT 'Normal',
+            area TEXT,
+            wants_response INTEGER NOT NULL DEFAULT 1,
+            status TEXT NOT NULL DEFAULT 'Submitted',
+            attachment_name TEXT,
+            attachment_path TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(reporter_id) REFERENCES staff_users(id)
+        )
+    """)
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS staff_voice_responses (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            concern_id INTEGER NOT NULL,
+            responder_id INTEGER NOT NULL,
+            response TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(concern_id) REFERENCES staff_voice_concerns(id),
+            FOREIGN KEY(responder_id) REFERENCES staff_users(id)
+        )
+    """)
+
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_staff_voice_reporter
+        ON staff_voice_concerns(reporter_id)
+    """)
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_staff_voice_status
+        ON staff_voice_concerns(status)
+    """)
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_staff_voice_created
+        ON staff_voice_concerns(created_at DESC)
+    """)
+
+
 
     connection.commit()
     connection.close()
@@ -1669,8 +1737,531 @@ def logout():
 
 
 # ============================================================
+# CONFIDENTIAL STAFF VOICE / CONCERNS
+# ============================================================
+
+STAFF_VOICE_CATEGORIES = [
+    "Workplace Problem",
+    "Staff Welfare",
+    "Management Concern",
+    "Harassment / Bullying",
+    "Safety Concern",
+    "Financial Concern",
+    "Suggestion / Improvement",
+    "Other",
+]
+
+STAFF_VOICE_URGENCY = ["Low", "Normal", "High", "Critical"]
+STAFF_VOICE_AREAS = [
+    "Administration",
+    "Finance & Procurement",
+    "Agriculture",
+    "Minerals & Chemistry",
+    "Business Development",
+    "Artificial Intelligence",
+    "Learning Centre",
+    "Innovation",
+    "Other / Prefer not to say",
+]
+STAFF_VOICE_STATUSES = [
+    "Submitted",
+    "Received",
+    "Under Review",
+    "Action Required",
+    "Resolved",
+    "Closed",
+]
+
+
+def _staff_voice_audit(action, summary, staff_id=None, target_id=None, details=None, severity="INFO"):
+    """Best-effort connection to the existing tamper-evident Audit & Activity Log."""
+    try:
+        from pages.audit_log import log_audit_event
+        log_audit_event(
+            "Staff Voice",
+            action,
+            summary,
+            actor_id=staff_id,
+            actor_name="Confidential Staff Voice User" if staff_id else "System",
+            actor_role="Staff" if staff_id else "System",
+            target_type="staff_voice_case" if target_id else None,
+            target_id=str(target_id) if target_id else None,
+            details=details,
+            severity=severity,
+        )
+    except Exception:
+        # Staff Voice must remain usable even if the optional audit module is absent.
+        pass
+
+
+def _next_staff_voice_case_number(connection):
+    year = datetime.now().year
+    row = connection.execute(
+        "SELECT COUNT(*) FROM staff_voice_concerns WHERE case_number LIKE ?",
+        (f"PIA-CON-{year}-%",),
+    ).fetchone()
+    sequence = int(row[0] or 0) + 1
+    return f"PIA-CON-{year}-{sequence:04d}"
+
+
+def _staff_voice_save_attachment(uploaded_file):
+    if not uploaded_file:
+        return None, None
+
+    data = uploaded_file.getvalue()
+    if len(data) > MAX_STAFF_VOICE_ATTACHMENT_SIZE:
+        st.error("Attachment is too large. The maximum size is 15 MB.")
+        return None, None
+
+    suffix = Path(uploaded_file.name).suffix
+    stored_name = f"{uuid.uuid4().hex}{suffix}"
+    path = STAFF_VOICE_ATTACHMENTS_DIR / stored_name
+    path.write_bytes(data)
+    return uploaded_file.name, str(path)
+
+
+def _staff_voice_get_responses(concern_id):
+    connection = get_connection()
+    rows = connection.execute(
+        """
+        SELECT r.response, r.created_at, u.full_name
+        FROM staff_voice_responses r
+        JOIN staff_users u ON u.id = r.responder_id
+        WHERE r.concern_id = ?
+        ORDER BY r.created_at ASC
+        """,
+        (concern_id,),
+    ).fetchall()
+    connection.close()
+    return rows
+
+
+def show_staff_voice(staff):
+    """Staff-facing confidential reporting and case tracking."""
+    st.title("🔒 Staff Voice & Confidential Concerns")
+    st.caption(
+        "A confidential channel for workplace problems, welfare concerns, "
+        "safety issues and constructive suggestions."
+    )
+
+    st.info(
+        "🔐 Your identity is stored securely for Super Admin accountability, "
+        "but it is hidden from ordinary staff, managers and delegated operators. "
+        "Only the Super Admin can view the reporter identity."
+    )
+
+    report_tab, my_cases_tab, guidance_tab = st.tabs(
+        ["📝 Submit a Concern", "📋 My Cases", "ℹ️ How Confidentiality Works"]
+    )
+
+    with report_tab:
+        st.subheader("Tell us what is happening")
+        st.write(
+            "You can raise a problem without having to confront it publicly. "
+            "Please give enough detail for the organisation to understand and act on it."
+        )
+
+        with st.form("staff_voice_submit_form", clear_on_submit=True):
+            category = st.selectbox("Concern Type", STAFF_VOICE_CATEGORIES, key="sv_category")
+            subject = st.text_input(
+                "Short Subject",
+                placeholder="e.g. Difficulty obtaining materials needed for my work",
+                key="sv_subject",
+            )
+            description = st.text_area(
+                "Describe the concern",
+                height=180,
+                placeholder="Explain what happened, what you are experiencing, and what you think would help.",
+                key="sv_description",
+            )
+            c1, c2 = st.columns(2)
+            with c1:
+                urgency = st.selectbox("Urgency", STAFF_VOICE_URGENCY, index=1, key="sv_urgency")
+            with c2:
+                area = st.selectbox("Area / Department", STAFF_VOICE_AREAS, key="sv_area")
+
+            wants_response = st.checkbox(
+                "I would like the Super Admin to respond to this case.",
+                value=True,
+                key="sv_wants_response",
+            )
+            attachment = st.file_uploader(
+                "Optional supporting document or image (maximum 15 MB)",
+                key="sv_attachment",
+            )
+
+            submitted = st.form_submit_button(
+                "🔐 Submit Confidentially",
+                type="primary",
+                use_container_width=True,
+            )
+
+        if submitted:
+            if not subject.strip():
+                st.error("Please enter a short subject.")
+            elif not description.strip():
+                st.error("Please describe the concern before submitting it.")
+            else:
+                connection = get_connection()
+                try:
+                    case_number = _next_staff_voice_case_number(connection)
+                    attachment_name, attachment_path = _staff_voice_save_attachment(attachment)
+                    connection.execute(
+                        """
+                        INSERT INTO staff_voice_concerns
+                        (case_number, reporter_id, category, subject, description,
+                         urgency, area, wants_response, attachment_name, attachment_path)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            case_number,
+                            staff["id"],
+                            category,
+                            subject.strip(),
+                            description.strip(),
+                            urgency,
+                            area,
+                            1 if wants_response else 0,
+                            attachment_name,
+                            attachment_path,
+                        ),
+                    )
+                    connection.commit()
+                    case_id = connection.execute(
+                        "SELECT id FROM staff_voice_concerns WHERE case_number = ?",
+                        (case_number,),
+                    ).fetchone()[0]
+                    st.success(f"Your confidential concern has been received. Case number: **{case_number}**")
+                    st.info("Keep this case number for future reference. Your identity is not shown in ordinary case views.")
+                    _staff_voice_audit(
+                        "SUBMIT_CONCERN",
+                        "Confidential staff concern submitted.",
+                        staff_id=staff["id"],
+                        target_id=case_id,
+                        details={"case_number": case_number, "category": category, "urgency": urgency},
+                        severity="HIGH" if urgency == "Critical" else "INFO",
+                    )
+                except Exception as exc:
+                    st.error(f"The confidential concern could not be saved: {exc}")
+                finally:
+                    connection.close()
+
+    with my_cases_tab:
+        connection = get_connection()
+        cases = connection.execute(
+            """
+            SELECT id, case_number, category, subject, description, urgency,
+                   area, wants_response, status, attachment_name, created_at, updated_at
+            FROM staff_voice_concerns
+            WHERE reporter_id = ?
+            ORDER BY created_at DESC
+            """,
+            (staff["id"],),
+        ).fetchall()
+        connection.close()
+
+        if not cases:
+            st.info("You have not submitted any confidential concerns yet.")
+        else:
+            for case in cases:
+                with st.expander(
+                    f"{case['case_number']} • {case['subject']} • {case['status']}",
+                    expanded=False,
+                ):
+                    c1, c2, c3 = st.columns(3)
+                    c1.metric("Status", case["status"])
+                    c2.metric("Urgency", case["urgency"])
+                    c3.metric("Submitted", str(case["created_at"])[:10])
+                    st.write(f"**Type:** {case['category']}")
+                    st.write(f"**Area:** {case['area'] or 'Not specified'}")
+                    st.write(f"**Concern:** {case['description']}")
+                    if case["attachment_name"]:
+                        attachment_path = Path(case["attachment_name"] and case["attachment_name"])
+                        st.caption(f"Supporting file: {case['attachment_name']}")
+                        # The actual file path is intentionally not exposed to the UI.
+                        db = get_connection()
+                        stored = db.execute(
+                            "SELECT attachment_path FROM staff_voice_concerns WHERE id = ? AND reporter_id = ?",
+                            (case["id"], staff["id"]),
+                        ).fetchone()
+                        db.close()
+                        if stored and stored[0] and Path(stored[0]).exists():
+                            with open(stored[0], "rb") as f:
+                                st.download_button(
+                                    "📎 Download your attachment",
+                                    f.read(),
+                                    file_name=case["attachment_name"],
+                                    key=f"sv_download_{case['id']}",
+                                )
+
+                    responses = _staff_voice_get_responses(case["id"])
+                    if responses:
+                        st.markdown("### 💬 Super Admin Response")
+                        for response in responses:
+                            st.info(
+                                f"**Super Admin • {response['created_at']}**\n\n{response['response']}"
+                            )
+                    elif case["wants_response"]:
+                        st.caption("A response has not yet been posted.")
+
+    with guidance_tab:
+        st.subheader("🔐 Confidentiality Rules")
+        st.markdown(
+            """
+            - Your **name and staff account are stored**, but are hidden from ordinary staff and managers.
+            - Only the **Super Admin** can open the identity details of a case.
+            - Each concern receives a confidential case number such as **PIA-CON-2026-0001**.
+            - You can return to **My Cases** to follow the status of your own submissions.
+            - The Super Admin can respond, change status and manage the case.
+            - Important Staff Voice actions can be recorded in the existing tamper-evident Audit & Activity Log.
+            """
+        )
+
+
+def show_confidential_concerns_admin(staff):
+    """Super Admin-only case management. Reporter identity is deliberately shown here and nowhere else."""
+    if staff["role"] != "Super Admin":
+        st.error("🔒 Only the Super Admin can access confidential concern management.")
+        return
+
+    st.title("🛡️ Confidential Staff Concerns")
+    st.caption("Super Admin control centre — reporter identities are protected from ordinary staff.")
+
+    connection = get_connection()
+    total = connection.execute("SELECT COUNT(*) FROM staff_voice_concerns").fetchone()[0]
+    open_count = connection.execute(
+        "SELECT COUNT(*) FROM staff_voice_concerns WHERE status NOT IN ('Resolved', 'Closed')"
+    ).fetchone()[0]
+    critical = connection.execute(
+        "SELECT COUNT(*) FROM staff_voice_concerns WHERE urgency = 'Critical' AND status NOT IN ('Resolved', 'Closed')"
+    ).fetchone()[0]
+    resolved = connection.execute(
+        "SELECT COUNT(*) FROM staff_voice_concerns WHERE status IN ('Resolved', 'Closed')"
+    ).fetchone()[0]
+    connection.close()
+
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("📥 Total Cases", total)
+    c2.metric("🔎 Open Cases", open_count)
+    c3.metric("🚨 Open Critical", critical)
+    c4.metric("✅ Resolved / Closed", resolved)
+
+    st.divider()
+
+    f1, f2, f3 = st.columns(3)
+    with f1:
+        status_filter = st.selectbox("Status", ["All"] + STAFF_VOICE_STATUSES, key="sv_admin_status")
+    with f2:
+        urgency_filter = st.selectbox("Urgency", ["All"] + STAFF_VOICE_URGENCY, key="sv_admin_urgency")
+    with f3:
+        category_filter = st.selectbox("Category", ["All"] + STAFF_VOICE_CATEGORIES, key="sv_admin_category")
+
+    connection = get_connection()
+    query = """
+        SELECT c.*, u.full_name AS reporter_name, u.username AS reporter_username,
+               u.role AS reporter_role
+        FROM staff_voice_concerns c
+        JOIN staff_users u ON u.id = c.reporter_id
+        WHERE 1=1
+    """
+    params = []
+    if status_filter != "All":
+        query += " AND c.status = ?"
+        params.append(status_filter)
+    if urgency_filter != "All":
+        query += " AND c.urgency = ?"
+        params.append(urgency_filter)
+    if category_filter != "All":
+        query += " AND c.category = ?"
+        params.append(category_filter)
+    query += " ORDER BY CASE c.urgency WHEN 'Critical' THEN 1 WHEN 'High' THEN 2 WHEN 'Normal' THEN 3 ELSE 4 END, c.created_at DESC"
+    cases = connection.execute(query, params).fetchall()
+    connection.close()
+
+    if not cases:
+        st.success("No confidential concerns match the selected filters.")
+        return
+
+    st.subheader("📋 Confidential Case Register")
+
+    for case in cases:
+        with st.expander(
+            f"{case['case_number']} • {case['urgency']} • {case['status']} • {case['subject']}",
+            expanded=False,
+        ):
+            # Explicit identity access is limited to this Super Admin view.
+            st.warning(
+                f"🔐 Reporter identity — {case['reporter_name']} (@{case['reporter_username']}) • {case['reporter_role']}"
+            )
+            _staff_voice_audit(
+                "VIEW_CONFIDENTIAL_IDENTITY",
+                "Super Admin viewed the reporter identity of a confidential staff concern.",
+                staff_id=staff["id"],
+                target_id=case["id"],
+                details={"case_number": case["case_number"]},
+            )
+
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Status", case["status"])
+            c2.metric("Urgency", case["urgency"])
+            c3.metric("Submitted", str(case["created_at"])[:16])
+            st.write(f"**Category:** {case['category']}")
+            st.write(f"**Area:** {case['area'] or 'Not specified'}")
+            st.write(f"**Subject:** {case['subject']}")
+            st.write(f"**Concern:** {case['description']}")
+            st.caption(f"Response requested: {'Yes' if case['wants_response'] else 'No'}")
+
+            if case["attachment_name"] and case["attachment_path"] and Path(case["attachment_path"]).exists():
+                with open(case["attachment_path"], "rb") as f:
+                    st.download_button(
+                        "📎 Download Supporting Attachment",
+                        f.read(),
+                        file_name=case["attachment_name"],
+                        key=f"sv_admin_download_{case['id']}",
+                    )
+
+            responses = _staff_voice_get_responses(case["id"])
+            if responses:
+                st.markdown("### 💬 Response History")
+                for response in responses:
+                    st.info(f"**Super Admin • {response['created_at']}**\n\n{response['response']}")
+
+            st.markdown("### ⚙️ Case Management")
+            with st.form(f"sv_admin_manage_{case['id']}"):
+                new_status = st.selectbox(
+                    "Case Status",
+                    STAFF_VOICE_STATUSES,
+                    index=STAFF_VOICE_STATUSES.index(case["status"]) if case["status"] in STAFF_VOICE_STATUSES else 0,
+                    key=f"sv_status_{case['id']}",
+                )
+                response_text = st.text_area(
+                    "Response to Staff Member (optional)",
+                    placeholder="Write a response that the reporting staff member will see in My Cases.",
+                    key=f"sv_response_{case['id']}",
+                )
+                save_case = st.form_submit_button("💾 Save Case Update", type="primary", use_container_width=True)
+
+            if save_case:
+                db = get_connection()
+                try:
+                    db.execute(
+                        "UPDATE staff_voice_concerns SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                        (new_status, case["id"]),
+                    )
+                    if response_text.strip():
+                        db.execute(
+                            "INSERT INTO staff_voice_responses (concern_id, responder_id, response) VALUES (?, ?, ?)",
+                            (case["id"], staff["id"], response_text.strip()),
+                        )
+                    db.commit()
+                    _staff_voice_audit(
+                        "UPDATE_CASE",
+                        "Super Admin updated a confidential staff concern.",
+                        staff_id=staff["id"],
+                        target_id=case["id"],
+                        details={"case_number": case["case_number"], "status": new_status, "response_added": bool(response_text.strip())},
+                    )
+                    st.success("Confidential case updated successfully.")
+                    st.rerun()
+                finally:
+                    db.close()
+
+
+def show_staff_voice_analytics(staff):
+    """High-level Super Admin analytics without exposing identities in the summary."""
+    if staff["role"] != "Super Admin":
+        return
+
+    st.subheader("📊 Staff Voice Analytics")
+    connection = get_connection()
+    rows = connection.execute(
+        "SELECT category, status, urgency, created_at FROM staff_voice_concerns"
+    ).fetchall()
+    connection.close()
+
+    if not rows:
+        st.info("Analytics will appear after confidential concerns are submitted.")
+        return
+
+    categories = {}
+    statuses = {}
+    urgencies = {}
+    for row in rows:
+        categories[row["category"]] = categories.get(row["category"], 0) + 1
+        statuses[row["status"]] = statuses.get(row["status"], 0) + 1
+        urgencies[row["urgency"]] = urgencies.get(row["urgency"], 0) + 1
+
+    a1, a2, a3 = st.columns(3)
+    with a1:
+        st.markdown("**Cases by Category**")
+        st.table([{"Category": k, "Cases": v} for k, v in sorted(categories.items(), key=lambda x: (-x[1], x[0]))])
+    with a2:
+        st.markdown("**Cases by Status**")
+        st.table([{"Status": k, "Cases": v} for k, v in sorted(statuses.items(), key=lambda x: (-x[1], x[0]))])
+    with a3:
+        st.markdown("**Cases by Urgency**")
+        st.table([{"Urgency": k, "Cases": v} for k, v in sorted(urgencies.items(), key=lambda x: (-x[1], x[0]))])
+
+
+# ============================================================
+
+# ============================================================
 # STAFF PORTAL
 # ============================================================
+
+
+STAFF_TOOL_LABELS = {key: label for key, label, _ in STAFF_MODULES}
+
+def _restricted_tool(module_key, staff):
+    label = STAFF_TOOL_LABELS.get(module_key, module_key)
+    st.markdown(f"### {label}")
+    st.warning("🔒 **Access Restricted**")
+    st.write("This tool is available in the Pan Ideate Africa staff toolbox, but your current authorization does not permit access.")
+    st.info(f"Your administrator can grant access to **{label}** when appropriate.")
+    st.caption(f"Current role: {staff['role']} • Access is controlled by your individual authorization profile.")
+
+def _render_staff_tool(module_key, staff):
+    if not has_staff_tool_access(staff['id'], module_key):
+        _restricted_tool(module_key, staff)
+        return
+    try:
+        if module_key == 'leave_attendance':
+            from pages.leave_attendance import show_staff
+            show_staff(staff['id'])
+        elif module_key == 'expenses_procurement':
+            from pages.expenses_procurement import show_staff
+            show_staff(staff['id'])
+        elif module_key == 'tasks':
+            from pages.task_manager import show_staff
+            show_staff(staff['id'])
+        elif module_key == 'staff_directory':
+            show_staff_directory_v1(staff['id'])
+        elif module_key == 'staff_messages':
+            st.subheader("✉️ Internal Staff Messages")
+            inbox_tab, compose_tab, sent_tab = st.tabs([f"📥 Inbox ({get_unread_count()})", "📝 Compose Message", "📤 Sent Messages"])
+            with inbox_tab: show_inbox()
+            with compose_tab: compose_message()
+            with sent_tab: show_sent()
+        elif module_key == 'notifications':
+            show_notification_centre(staff['id'])
+        elif module_key == 'documents':
+            show_document_centre(staff['id'])
+        elif module_key == 'ai_assistant':
+            show_staff_ai_assistant(staff['id'])
+        elif module_key == 'meetings':
+            show_staff_meeting_centre(staff['id'])
+        elif module_key == 'approvals':
+            if has_approval_access(staff['id']): show_staff_approval_centre(staff['id'])
+            else: _restricted_tool(module_key, staff)
+        elif module_key == 'audit_log':
+            from pages.audit_log import show_audit_log
+            show_audit_log()
+        else:
+            st.markdown(f"### {STAFF_TOOL_LABELS.get(module_key, module_key)}")
+            st.info("🛠️ This tool is reserved in the staff toolbox and is ready for future staff-facing activation. Your access permission has been recorded.")
+    except Exception as exc:
+        st.error(f"The {STAFF_TOOL_LABELS.get(module_key, module_key)} tool could not be opened safely yet.")
+        st.caption(f"Technical detail: {exc}")
 
 def show_staff_portal():
 
@@ -1770,22 +2361,37 @@ def show_staff_portal():
     # We intentionally use tabs instead of another sidebar
     # because app.py already owns the main Streamlit sidebar.
     # --------------------------------------------------------
+    init_access_control()
+    notification_count = get_notification_count(staff["id"])
+    approval_access = has_approval_access(staff["id"])
+
+    # Complete toolbox stays visible; permissions are enforced when opened.
     tabs = [
-        "🏠 Dashboard",
-        "👥 Staff Directory",
-        "✉️ Messages",
-        "👤 My Profile"
+        "🏠 Dashboard", f"🔔 Notifications ({notification_count})", "👥 Staff Directory",
+        "🕘 Leave & Attendance", "💰 Expenses & Procurement", "📋 Task & Project Manager",
+        "💬 Staff Communications", "✉️ Messages", "👤 My Profile", "📁 Documents",
+        "🤖 AI Staff Assistant", "📅 Meeting Centre", "✅ Approval Centre",
+        "🔐 Audit & Activity Log", "💡 Innovation Ideas", "🎓 Learning Centre", "📚 Knowledge Hub",
+        "🔒 Staff Voice", "🛡️ Staff Management",
     ]
 
-    if staff["role"] == "Super Admin":
-        tabs.append("🛡️ Staff Management")
-
     selected_tab = st.tabs(tabs)
+
+    tab_indices = {
+        label: index
+        for index, label in enumerate(tabs)
+    }
+
+    notification_tab = next(
+        label
+        for label in tabs
+        if label.startswith("🔔 Notifications")
+    )
 
     # --------------------------------------------------------
     # DASHBOARD TAB
     # --------------------------------------------------------
-    with selected_tab[0]:
+    with selected_tab[tab_indices["🏠 Dashboard"]]:
         st.subheader("🌍 Pan Ideate Africa Staff Dashboard")
 
         st.info(
@@ -1856,50 +2462,50 @@ def show_staff_portal():
             st.info("No active staff members found.")
 
     # --------------------------------------------------------
-    # STAFF DIRECTORY TAB
+    # STAFF TOOLBOX
     # --------------------------------------------------------
-    with selected_tab[1]:
-        show_staff_directory()
-
-    # --------------------------------------------------------
-    # MESSAGES TAB
-    # --------------------------------------------------------
-    with selected_tab[2]:
-        st.subheader("✉️ Internal Staff Messages")
-        st.info(
-            "🔒 Private messaging: you can only see messages sent to you or messages you sent. "
-            "Attachments are also restricted to the sender and recipient."
-        )
-
-        inbox_tab, compose_tab, sent_tab = st.tabs(
-            [
-                f"📥 Inbox ({unread})",
-                "📝 Compose Message",
-                "📤 Sent Messages"
-            ]
-        )
-
-        with inbox_tab:
-            show_inbox()
-
-        with compose_tab:
-            compose_message()
-
-        with sent_tab:
-            show_sent()
+    with selected_tab[tab_indices[f"🔔 Notifications ({notification_count})"]]: _render_staff_tool('notifications', staff)
+    with selected_tab[tab_indices["👥 Staff Directory"]]: _render_staff_tool('staff_directory', staff)
+    with selected_tab[tab_indices["🕘 Leave & Attendance"]]: _render_staff_tool('leave_attendance', staff)
+    with selected_tab[tab_indices["💰 Expenses & Procurement"]]: _render_staff_tool('expenses_procurement', staff)
+    with selected_tab[tab_indices["📋 Task & Project Manager"]]: _render_staff_tool('tasks', staff)
+    with selected_tab[tab_indices["💬 Staff Communications"]]: _render_staff_tool('staff_communications', staff)
+    with selected_tab[tab_indices["✉️ Messages"]]: _render_staff_tool('staff_messages', staff)
+    with selected_tab[tab_indices["👤 My Profile"]]: show_profile()
+    with selected_tab[tab_indices["📁 Documents"]]: _render_staff_tool('documents', staff)
+    with selected_tab[tab_indices["🤖 AI Staff Assistant"]]: _render_staff_tool('ai_assistant', staff)
+    with selected_tab[tab_indices["📅 Meeting Centre"]]: _render_staff_tool('meetings', staff)
+    with selected_tab[tab_indices["✅ Approval Centre"]]: _render_staff_tool('approvals', staff)
+    with selected_tab[tab_indices["🔐 Audit & Activity Log"]]: _render_staff_tool('audit_log', staff)
+    with selected_tab[tab_indices["💡 Innovation Ideas"]]: _render_staff_tool('innovation', staff)
+    with selected_tab[tab_indices["🎓 Learning Centre"]]: _render_staff_tool('learning', staff)
+    with selected_tab[tab_indices["📚 Knowledge Hub"]]: _render_staff_tool('knowledge_hub', staff)
 
     # --------------------------------------------------------
-    # PROFILE TAB
+    # CONFIDENTIAL STAFF VOICE
+    # Available to all active staff; it is intentionally separate
+    # from ordinary module-access permissions so staff can report
+    # concerns without needing permission from a manager.
     # --------------------------------------------------------
-    with selected_tab[3]:
-        show_profile()
+    with selected_tab[tab_indices["🔒 Staff Voice"]]:
+        show_staff_voice(staff)
+
+    with selected_tab[tab_indices["🛡️ Staff Management"]]:
+        if staff["role"] == "Super Admin":
+            show_staff_management()
+        else:
+            _render_staff_tool("staff_management", staff)
 
     # --------------------------------------------------------
-    # SUPER ADMIN STAFF MANAGEMENT TAB
+    # SUPER ADMIN — CONFIDENTIAL CONCERNS MANAGEMENT
     # --------------------------------------------------------
     if staff["role"] == "Super Admin":
-        with selected_tab[4]:
-            show_staff_management()
+        with selected_tab[tab_indices["🔒 Staff Voice"]]:
+            st.divider()
+            st.subheader("🛡️ Super Admin Confidential Concerns Management")
+            show_confidential_concerns_admin(staff)
+            st.divider()
+            show_staff_voice_analytics(staff)
 
     # --------------------------------------------------------
     # LOGOUT
